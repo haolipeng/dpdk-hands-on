@@ -5,6 +5,7 @@
 #include <inttypes.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 #include <rte_common.h>
 #include <rte_log.h>
@@ -13,6 +14,9 @@
 #include <rte_mempool.h>
 #include <rte_mbuf.h>
 #include <rte_ether.h>
+#include <rte_cycles.h>
+#include <rte_time.h>
+#include <rte_ethdev.h>
 
 #define RX_RING_SIZE 1024
 #define NUM_MBUFS 8191
@@ -22,6 +26,11 @@
 // 全局变量
 static volatile bool force_quit = false;
 static struct rte_mempool *mbuf_pool = NULL;
+
+// 时间戳相关变量
+static uint64_t tsc_hz = 0; // TSC频率
+static uint64_t tsc_base_time = 0;  // tsc基准时间（纳秒）
+static uint64_t tsc_start = 0;  // 程序启动时的TSC值
 
 // 统计信息
 static uint64_t total_packets = 0;
@@ -34,6 +43,54 @@ static void signal_handler(int signum)
         printf("\n\nSignal %d received, preparing to exit...\n", signum);
         force_quit = true;
     }
+}
+
+// 初始化时间戳系统
+static int init_timestamp_system(void)
+{
+    // 获取TSC频率
+    tsc_hz = rte_get_tsc_hz();
+    if (tsc_hz == 0) {
+        printf("Error: Cannot get TSC frequency\n");
+        return -1;
+    }
+    
+    // 记录程序启动时的TSC值
+    tsc_start = rte_rdtsc();
+    
+    // 设置基准时间，转化为纳秒值
+    struct timespec base_ts;
+    clock_gettime(CLOCK_REALTIME, &base_ts);
+    tsc_base_time = (uint64_t)base_ts.tv_sec * 1000000000ULL + base_ts.tv_nsec;
+
+    return 0;
+}
+
+// 高性能时间戳获取函数
+static void get_packet_timestamp(uint64_t *tsc_cycles, uint64_t *wall_time_ns)
+{
+    // 获取TSC周期数（最高性能）
+    *tsc_cycles = rte_rdtsc();
+    
+    // 检查TSC频率是否有效
+    if (tsc_hz == 0) {
+        printf("Warning: TSC frequency is 0, using system time\n");
+        struct timespec time;
+        clock_gettime(CLOCK_REALTIME, &time);
+        *wall_time_ns = (uint64_t)time.tv_sec * 1000000000ULL + time.tv_nsec;
+        return;
+    }
+    
+    // 转换为纳秒时间戳
+    // 计算从程序启动到现在的TSC差值，然后转换为时间差
+    uint64_t tsc_elapsed = *tsc_cycles - tsc_start;
+    
+    // 使用更高精度的计算方法
+    // 先计算秒数，再计算纳秒数，避免大数相乘溢出
+    uint64_t elapsed_seconds = tsc_elapsed / tsc_hz;
+    uint64_t elapsed_nanoseconds = ((tsc_elapsed % tsc_hz) * 1000000000ULL) / tsc_hz;
+    
+    *wall_time_ns = tsc_base_time + elapsed_seconds * 1000000000ULL + elapsed_nanoseconds;
 }
 
 // 简化的端口初始化函数 (仅RX)
@@ -125,6 +182,7 @@ static void process_packet(struct rte_mbuf *pkt)
 {
     struct rte_ether_hdr *eth_hdr;
     uint16_t ether_type;
+    uint64_t tsc_cycles, wall_time_ns; // tsc周期数，纳秒时间戳
     
     // 获取以太网头
     eth_hdr = rte_pktmbuf_mtod(pkt, struct rte_ether_hdr *);
@@ -149,7 +207,35 @@ static void process_packet(struct rte_mbuf *pkt)
                (ipv4_hdr->dst_addr >> 24) & 0xFF);
     }
     
-    printf("\n");
+    // 使用DPDK高性能时间戳API
+    get_packet_timestamp(&tsc_cycles, &wall_time_ns);
+    
+    // 使用传统的系统API获取时间戳
+    struct timespec time;
+    clock_gettime(CLOCK_REALTIME, &time);
+    uint64_t system_time_ns = (uint64_t)time.tv_sec * 1000000000ULL + time.tv_nsec;
+    
+    // 计算时间差
+    int64_t time_diff = (int64_t)wall_time_ns - (int64_t)system_time_ns;
+    
+    // 添加调试信息（仅前几个包）
+    static int debug_count = 0;
+    if (debug_count < 3) {
+        printf("\n=== 调试信息 %d ===\n", debug_count + 1);
+        printf("TSC频率: %"PRIu64" Hz\n", tsc_hz);
+        printf("TSC开始值: %"PRIu64" cycles\n", tsc_start);
+        printf("基准时间: %"PRIu64" ns\n", tsc_base_time);
+        printf("当前TSC: %"PRIu64" cycles\n", tsc_cycles);
+        printf("TSC差值: %"PRIu64" cycles\n", tsc_cycles - tsc_start);
+        printf("DPDK时间: %"PRIu64" ns\n", wall_time_ns);
+        printf("系统时间: %ld.%09ld s\n", time.tv_sec, time.tv_nsec);
+        printf("时间差: %"PRId64" ns\n", time_diff);
+        printf("==================\n");
+        debug_count++;
+    }
+    
+    printf(", TSC: %"PRIu64", DPDK: %"PRIu64" ns, System: %ld.%09ld s, Diff: %"PRId64" ns\n", 
+           tsc_cycles, wall_time_ns, time.tv_sec, time.tv_nsec, time_diff);
     
     // 更新统计
     total_packets++;
@@ -171,7 +257,7 @@ static void capture_loop(void)
             
             // 批量接收数据包
             const uint16_t nb_rx = rte_eth_rx_burst(port, 0, bufs, BURST_SIZE);
-            
+
             if (likely(nb_rx > 0)) {
                 for (uint16_t i = 0; i < nb_rx; i++) {
                     // 处理每个数据包
@@ -211,6 +297,10 @@ int main(int argc, char *argv[])
     // 注册信号处理
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
+    
+    // 初始化时间戳系统
+    if (init_timestamp_system() != 0)
+        rte_exit(EXIT_FAILURE, "Error initializing timestamp system\n");
     
     // 2. 检查可用端口
     nb_ports = rte_eth_dev_count_avail();

@@ -1,0 +1,26 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/3-capture_packet/**",
+                "/usr/src/linux-source-5.15.0/include/",
+                "/usr/src/linux-source-5.15.0/arch/x86/include/",
+                "/home/work/dpdk-stable-24.11.1/dpdklib/include"
+            ],
+            "defines": [
+                "__TARGET_ARCH_x86",
+                "__ASM_SYSREG_H",
+                "__BPF_TRACING__",
+                "__KERNEL__"
+            ],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c11",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "linux-gcc-x64",
+            "configurationProvider": "ms-vscode.cmake-tools",
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json"
+        }
+    ], 
+    "version": 4
+}

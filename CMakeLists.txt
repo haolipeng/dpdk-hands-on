@@ -45,6 +45,6 @@ set(DPDK_COMPILE_FLAGS ${DPDK_CFLAGS})
 set(DPDK_LINK_FLAGS ${DPDK_LIBRARIES})
 
 # 添加子目录
-add_subdirectory(helloworld)
-add_subdirectory(hash_usage)
+add_subdirectory(1-helloworld)
+add_subdirectory(2-hash_usage)
 add_subdirectory(3-capture_packet)
