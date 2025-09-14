@@ -212,9 +212,44 @@ static void process_packet(struct rte_mbuf *pkt)
                (dst_ip >> 8) & 0xFF,   // 第二字节
                (dst_ip >> 0) & 0xFF);  // 最低字节
 
-        //2.2 获取下一层的协议类型protocol
+        //2.2 获取ip协议的版本号
+        uint8_t version = ipv4_hdr->version_ihl >> 4;
+        printf("version: %d\n", version);
+
+        //2.3 获取ip协议的头长度
+        uint8_t ihl = ipv4_hdr->version_ihl & 0x0F;
+        printf("ihl: %d\n", ihl);
+
+        //2.4 解析ip协议的其他字段
+        //tos字段
+        uint8_t type_of_service = ipv4_hdr->type_of_service;
+        printf("type_of_service: %d\n", type_of_service);
+
+        //total_length字段
+        uint16_t total_length = rte_be_to_cpu_16(ipv4_hdr->total_length);
+        printf("total_length: %d\n", total_length);
+
+        //packet_id字段
+        uint16_t packet_id = rte_be_to_cpu_16(ipv4_hdr->packet_id);
+        printf("packet_id: %d\n", packet_id);
+
+        //fragment_offset字段 (包含flags和offset)
+        uint16_t fragment_offset_raw = rte_be_to_cpu_16(ipv4_hdr->fragment_offset);
+        uint16_t flags = (fragment_offset_raw >> 13) & 0x7;  // 高3位是flags
+        uint16_t fragment_offset = fragment_offset_raw & 0x1FFF;  // 低13位是offset
+        printf("flags: 0x%x, fragment_offset: %d\n", flags, fragment_offset);
+        
+        //ttl字段
+        uint8_t ttl = ipv4_hdr->time_to_live;
+        printf("ttl: %d\n", ttl);
+
+        //protocol字段
         uint8_t protocol = ipv4_hdr->next_proto_id;
-        printf("protocol: %02x\n", protocol);
+        printf("protocol: %d\n", protocol);
+
+        //checksum字段
+        uint16_t checksum = rte_be_to_cpu_16(ipv4_hdr->hdr_checksum);
+        printf("checksum: 0x%04x\n", checksum);
 
         if(protocol == IPPROTO_TCP)
         {
