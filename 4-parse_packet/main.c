@@ -192,6 +192,7 @@ static void process_packet(struct rte_mbuf *pkt)
     rte_ether_format_addr(buf, RTE_ETHER_ADDR_FMT_SIZE, &(eth_hdr->src_addr));
     printf("src_mac: %s\n", buf);
 
+    //解析ipv4协议
     if(ether_type == RTE_ETHER_TYPE_IPV4)
     {
         //2.从rte_mbuf结构中获取ipv4头
@@ -254,12 +255,29 @@ static void process_packet(struct rte_mbuf *pkt)
         if(protocol == IPPROTO_TCP)
         {
             //3.从rte_mbuf结构中获取tcp头
-            //struct rte_tcp_hdr *tcp_hdr = rte_pktmbuf_mtod_offset(pkt, struct rte_tcp_hdr *, sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr));
             printf("detect packet is tcp protocol!\n");
+            uint8_t l2_len = sizeof(struct rte_ether_hdr);
+            uint8_t l3_len = sizeof(struct rte_ipv4_hdr);   
+
+            struct rte_tcp_hdr *tcp_hdr = rte_pktmbuf_mtod_offset(pkt, struct rte_tcp_hdr *, l2_len + l3_len);
+            uint16_t src_port = rte_be_to_cpu_16(tcp_hdr->src_port);
+            uint16_t dst_port = rte_be_to_cpu_16(tcp_hdr->dst_port);
+
+            uint32_t seq = rte_be_to_cpu_32(tcp_hdr->sent_seq);
+            uint32_t ack = rte_be_to_cpu_32(tcp_hdr->recv_ack);
+
+            uint8_t data_off = (tcp_hdr->data_off >> 4) & 0x0F;
+            data_off *= 4;
+
+            uint8_t tcp_flags = tcp_hdr->tcp_flags;
+            
+            uint16_t rx_win = rte_be_to_cpu_16(tcp_hdr->rx_win);
+            uint16_t cksum = rte_be_to_cpu_16(tcp_hdr->cksum);
+            uint16_t tcp_urp = rte_be_to_cpu_16(tcp_hdr->tcp_urp);
+
+            printf("src_port: %d, dst_port: %d, seq: %d, ack: %d, data_off: %d, tcp_flags: %d, rx_win: %d, cksum: 0x%04X, tcp_urp: %d\n", src_port, dst_port, seq, ack, data_off, tcp_flags, rx_win, cksum, tcp_urp);
         }
     }
-    
-    
     
     // 更新统计
     total_packets++;
