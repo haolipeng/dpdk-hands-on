@@ -78,7 +78,7 @@ test_mempool_basic()
 		MEMPOOL_ELT_SIZE, 0, 0,
 		NULL, NULL,
 		NULL, NULL,
-		SOCKET_ID_ANY, 0);
+		SOCKET_ID_ANY, 0);//重点看下这个函数
 
 	if (mp == NULL)
 	{
@@ -108,7 +108,7 @@ test_mempool_basic()
 
 	printf("4.批量获取两个对象后获取对象数量\n");
 	void *objects[2];
-	if (rte_mempool_get_bulk(mp, objects, 2) < 0)
+	if (rte_mempool_get_bulk(mp, objects, 2) < 0) //批量获取
 	{
 		printf("ERROR: bulk get objects failed\n");
 		return -1;
@@ -120,10 +120,14 @@ test_mempool_basic()
 	printf("-----------------------------------------\n");
 
 	printf("5.批量将两个对象归还给内存池\n");
-	rte_mempool_put_bulk(mp, objects, 2);
+	rte_mempool_put_bulk(mp, objects, 2); //批量归还
 	printf("可用对象数量: %d, 使用中对象数量: %d\n", 
 		   rte_mempool_avail_count(mp), rte_mempool_in_use_count(mp));
 	printf("-----------------------------------------\n");
+
+	printf("5.释放内存池\n");
+	rte_mempool_free(mp);
+
 	return ret;
 }
 

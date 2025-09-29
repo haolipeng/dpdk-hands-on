@@ -70,6 +70,7 @@
         "optional": "cpp",
         "source_location": "cpp",
         "span": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "flow_table.h": "c"
     }
 }
