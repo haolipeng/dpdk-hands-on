@@ -1,26 +1,41 @@
 # DPDK Hands-on 项目
 
-本项目包含三个 DPDK 示例程序，展示了 DPDK 的核心功能和用法。所有程序都已从 Makefile 构建系统转换为 CMake 构建系统。
+本项目是一个面向 DPDK 初学者的完整教程和实战项目，包含 6 个循序渐进的示例程序，展示了 DPDK 的核心功能和用法。每个示例都配有详细的中文教程文档。所有程序都使用 CMake 构建系统。
 
 ## 项目结构
 
 ```
 dpdk-hands-on/
-├── build/                    # CMake 构建目录
-├── bin/                      # 可执行文件输出目录
-│   ├── helloworld           # Hello World 示例
-│   ├── hash_usage           # 哈希表使用示例
-│   └── capture_packet       # 数据包捕获程序
-├── 1-helloworld/              # Hello World 源代码
-├── 2-hash_usage/              # 哈希表使用源代码
-├── 3-capture_packet/        # 数据包捕获源代码
-├── CMakeLists.txt           # 根 CMake 配置
-└── .gitignore              # Git 忽略文件
+├── build/                        # CMake 构建目录
+├── bin/                          # 可执行文件输出目录
+│   ├── helloworld               # Lesson 1: Hello World
+│   ├── hash_usage               # Lesson 2: 哈希表使用
+│   ├── capture_packet           # Lesson 3: 数据包捕获
+│   ├── parse_packet             # Lesson 4: 数据包解析
+│   ├── mempool_usage            # Lesson 5: 内存池使用
+│   └── flow_manager             # Lesson 6: 流管理器
+├── 1-helloworld/                 # Lesson 1 源代码
+├── 2-hash_usage/                 # Lesson 2 源代码
+├── 3-capture_packet/             # Lesson 3 源代码
+├── 4-parse_packet/               # Lesson 4 源代码
+├── 5-mempool_usage/              # Lesson 5 源代码
+├── 6-flow_manager/               # Lesson 6 源代码
+├── lesson1-helloworld.md         # Lesson 1 教程文档
+├── lesson2-hash.md               # Lesson 2 教程文档
+├── lesson3-capture-packet.md     # Lesson 3 教程文档
+├── lesson4-parse-packet.md       # Lesson 4 教程文档
+├── lesson5-mempool.md            # Lesson 5 教程文档
+├── lesson6-flowmanager.md        # Lesson 6 教程文档
+├── lesson7-multiprocess.md       # Lesson 7 教程文档（理论）
+├── picture/                      # 教程配图目录
+├── CMakeLists.txt                # 根 CMake 配置
+└── README.md                     # 本文档
 ```
 
-## 示例程序介绍
+## 教程和示例程序
 
-### 1. Hello World (`helloworld/`)
+### Lesson 1: Hello World (`1-helloworld/`)
+📖 **教程**: [lesson1-helloworld.md](lesson1-helloworld.md)
 
 **功能**: DPDK 基础入门示例
 
@@ -36,10 +51,13 @@ dpdk-hands-on/
 
 **运行示例**:
 ```bash
-sudo ./bin/helloworld -l 0-1 -n 4
+sudo ./bin/helloworld -l 0-1
 ```
 
-### 2. Hash Usage (`hash_usage/`)
+---
+
+### Lesson 2: Hash Table Usage (`2-hash_usage/`)
+📖 **教程**: [lesson2-hash.md](lesson2-hash.md)
 
 **功能**: DPDK 哈希表使用示例
 
@@ -52,14 +70,17 @@ sudo ./bin/helloworld -l 0-1 -n 4
 - DPDK 哈希表 API 使用
 - 网络流识别和处理
 - 内存对齐和结构体优化
-- 数据包解析基础
+- 哈希函数选择（CRC vs JHash）
 
 **运行示例**:
 ```bash
-sudo ./bin/hash_usage -l 0-1 -n 4
+sudo ./bin/hash_usage -l 0
 ```
 
-### 3. Capture Packet (`3-capture_packet/`)
+---
+
+### Lesson 3: Capture Packet (`3-capture_packet/`)
+📖 **教程**: [lesson3-capture-packet.md](lesson3-capture-packet.md)
 
 **功能**: 网络数据包捕获程序
 
@@ -68,108 +89,510 @@ sudo ./bin/hash_usage -l 0-1 -n 4
 - 支持多端口同时监听
 - 数据包统计和分析
 - 支持混杂模式
-- IPv4 数据包解析
+- 基础 IPv4 数据包解析
 
 **学习要点**:
 - 网络接口初始化和配置
 - 数据包接收和处理
-- 内存池管理
-- 网络协议解析
+- 内存池（mbuf pool）管理
+- 网络协议基础解析
 - 信号处理和优雅退出
 
 **运行示例**:
 ```bash
 # 基本运行
-sudo ./bin/capture_packet -l 0-1 -n 4
+sudo ./bin/capture_packet -l 0
 
-# 指定网卡运行
-sudo ./bin/capture_packet -l 0-1 -n 4 -- -p 0x1
+# 查看详细日志
+sudo ./bin/capture_packet -l 0 --log-level=8
 ```
 
-## 构建说明
+---
+
+### Lesson 4: Parse Packet (`4-parse_packet/`)
+📖 **教程**: [lesson4-parse-packet.md](lesson4-parse-packet.md)
+
+**功能**: 深度数据包解析程序
+
+**主要特性**:
+- 完整的以太网、IPv4、TCP/UDP 协议解析
+- 详细的协议字段提取和显示
+- 大小端转换处理
+- 协议类型识别
+
+**学习要点**:
+- 网络协议栈深入理解
+- 数据包头部结构解析
+- 字节序转换（网络序 vs 主机序）
+- 多层协议解析
+- DPDK mbuf 数据访问方法
+
+**运行示例**:
+```bash
+sudo ./bin/parse_packet -l 0
+```
+
+---
+
+### Lesson 5: Mempool Usage (`5-mempool_usage/`)
+📖 **教程**: [lesson5-mempool.md](lesson5-mempool.md)
+
+**功能**: DPDK 内存池使用示例
+
+**主要特性**:
+- 演示 DPDK 内存池的创建和使用
+- 自定义对象内存池
+- 内存对象分配和释放
+- 内存池统计信息查询
+- NUMA 感知的内存分配
+
+**学习要点**:
+- DPDK 内存池（mempool）原理
+- 对象缓存机制
+- 内存池配置参数
+- 内存池性能优化
+- 批量分配和释放
+- 内存泄漏检测
+
+**运行示例**:
+```bash
+sudo ./bin/mempool_usage -l 0
+```
+
+---
+
+### Lesson 6: Flow Manager (`6-flow_manager/`)
+📖 **教程**: [lesson6-flowmanager.md](lesson6-flowmanager.md)
+
+**功能**: TCP 流管理器
+
+**主要特性**:
+- 基于哈希表的流管理
+- TCP 会话跟踪
+- 五元组（5-tuple）流识别
+- 流统计（数据包数、字节数）
+- 双向流聚合
+
+**学习要点**:
+- 网络流的概念和管理
+- DPDK Hash 表高级应用
+- 流键规范化技术
+- 会话状态跟踪
+- 流表遍历和统计
+- 实际网络应用场景
+
+**运行示例**:
+```bash
+sudo ./bin/flow_manager -l 0
+```
+
+---
+
+### Lesson 7: Multi-Process Architecture
+📖 **教程**: [lesson7-multiprocess.md](lesson7-multiprocess.md)
+
+**说明**: 多进程架构理论教程（暂无代码示例）
+
+**学习要点**:
+- DPDK 多进程模型
+- 主进程和从进程通信
+- 共享内存管理
+- 进程间数据交换
+
+## 快速开始
 
 ### 环境要求
 
-- DPDK 开发库 (推荐版本 24.11.2)
-- pkg-config
-- CMake 3.10+
-- GCC 编译器
-- Linux 系统
+- **操作系统**: Linux (推荐 Ubuntu 20.04+)
+- **DPDK**: 版本 24.11.2 或更高
+- **编译工具**:
+  - GCC 7.0+
+  - CMake 3.10+
+  - pkg-config
+- **硬件**:
+  - 至少 2GB RAM
+  - 支持大页内存的 CPU
+  - （可选）网卡用于实际测试
 
-### 构建步骤
+### 安装 DPDK
 
 ```bash
-# 1. 创建构建目录
-mkdir build
+# Ubuntu/Debian
+sudo apt-get install dpdk dpdk-dev
+
+# 或从源码编译（参考 DPDK 官方文档）
+wget https://fast.dpdk.org/rel/dpdk-24.11.2.tar.xz
+tar xf dpdk-24.11.2.tar.xz
+cd dpdk-24.11.2
+meson build
+cd build
+ninja
+sudo ninja install
+```
+
+### 配置大页内存
+
+```bash
+# 临时配置（重启后失效）
+echo 1024 | sudo tee /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+
+# 永久配置（编辑 /etc/sysctl.conf）
+sudo bash -c "echo 'vm.nr_hugepages=1024' >> /etc/sysctl.conf"
+sudo sysctl -p
+
+# 挂载大页内存
+sudo mkdir -p /mnt/huge
+sudo mount -t hugetlbfs nodev /mnt/huge
+
+# 验证配置
+grep Huge /proc/meminfo
+```
+
+### 构建项目
+
+```bash
+# 1. 克隆项目（如果还没有）
+git clone <repository-url>
+cd dpdk-hands-on
+
+# 2. 创建构建目录
+mkdir -p build
 cd build
 
-# 2. 配置 CMake
+# 3. 配置 CMake
 cmake ..
 
-# 3. 编译
+# 4. 编译所有示例
 make
 
-# 4. 可执行文件将生成在 ../bin/ 目录中
+# 5. 可执行文件在 ../bin/ 目录中
+ls -lh ../bin/
 ```
 
 ### 构建选项
 
-- **Debug 模式**: `cmake -DCMAKE_BUILD_TYPE=Debug ..`
-- **Release 模式**: `cmake -DCMAKE_BUILD_TYPE=Release ..` (默认)
+```bash
+# Debug 模式（带调试符号）
+cmake -DCMAKE_BUILD_TYPE=Debug ..
 
-## 运行说明
+# Release 模式（优化性能，默认）
+cmake -DCMAKE_BUILD_TYPE=Release ..
 
-### 通用 EAL 参数
+# 编译单个示例
+make helloworld
+make hash_usage
+make capture_packet
+```
+
+### 运行第一个示例
+
+```bash
+# 进入 bin 目录
+cd ../bin
+
+# 运行 Hello World（最简单的示例）
+sudo ./helloworld -l 0
+
+# 应该看到类似输出：
+# EAL: Detected 4 lcore(s)
+# hello from core 0
+```
+
+## 学习路径
+
+### 推荐学习顺序
+
+按照以下顺序学习，可以循序渐进地掌握 DPDK：
+
+1. **Lesson 1: Hello World** - 了解 DPDK 基础和 EAL 初始化
+2. **Lesson 2: Hash Table** - 学习 DPDK 核心数据结构
+3. **Lesson 3: Capture Packet** - 掌握网卡初始化和数据包接收
+4. **Lesson 4: Parse Packet** - 深入理解网络协议解析
+5. **Lesson 5: Mempool** - 掌握内存管理和性能优化
+6. **Lesson 6: Flow Manager** - 构建实际的网络应用
+7. **Lesson 7: Multi-Process** - 理解高级架构模式
+
+### 学习建议
+
+- **阅读教程**: 每个 Lesson 都有详细的 markdown 教程，先阅读理解再运行代码
+- **动手实践**: 运行每个示例，观察输出，尝试修改参数
+- **对比代码**: 对比不同 Lesson 之间的代码差异，理解演进过程
+- **查阅文档**: 遇到不理解的 API，查阅 DPDK 官方文档
+- **逐步调试**: 使用 `--log-level=8` 参数查看详细日志
+
+## 常用 EAL 参数
 
 所有程序都支持标准的 DPDK EAL 参数：
 
-- `-l <core_list>`: 指定使用的 CPU 核心列表
-- `-n <num_memory_channels>`: 内存通道数量
-- `-m <memory_size>`: 内存大小 (MB)
-- `--huge-dir <path>`: 大页内存目录
-- `-w <pci_address>`: 绑定网卡 PCI 地址
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| `-l <core_list>` | 指定使用的 CPU 核心 | `-l 0` 或 `-l 0-3` |
+| `-n <channels>` | 内存通道数量 | `-n 4` |
+| `-m <memory_MB>` | 内存大小（MB） | `-m 512` |
+| `--log-level=<level>` | 日志级别（0-8） | `--log-level=8` |
+| `-w <pci_addr>` | 白名单网卡 PCI 地址 | `-w 0000:01:00.0` |
+| `--huge-dir <path>` | 大页内存目录 | `--huge-dir /mnt/huge` |
+| `--no-pci` | 不使用 PCI 设备 | `--no-pci` |
 
-### 示例运行命令
+### 运行示例命令
 
 ```bash
-# Hello World - 使用核心 0-1，4个内存通道
-sudo ./bin/helloworld -l 0-1 -n 4
+# 1. Hello World（最简单，不需要网卡）
+sudo ./bin/helloworld -l 0
 
-# Hash Usage - 使用核心 0-3，8个内存通道
-sudo ./bin/hash_usage -l 0-3 -n 8
+# 2. Hash Table（演示哈希表，不需要网卡）
+sudo ./bin/hash_usage -l 0
 
-# Capture Packet - 使用核心 0-1，绑定网卡
-sudo ./bin/capture_packet -l 0-1 -n 4 -w 0000:01:00.0
+# 3. Capture Packet（需要网卡）
+sudo ./bin/capture_packet -l 0
+
+# 4. Parse Packet（需要网卡，详细解析）
+sudo ./bin/parse_packet -l 0 --log-level=8
+
+# 5. Mempool（演示内存池，不需要网卡）
+sudo ./bin/mempool_usage -l 0
+
+# 6. Flow Manager（需要网卡，流跟踪）
+sudo ./bin/flow_manager -l 0
 ```
 
-## 技术特性
+## 项目特色
 
-### CMake 构建系统
+### 📚 详细的中文教程
 
-- 自动检测 DPDK 依赖
-- 支持 pkg-config 配置
+- 每个示例都配有完整的中文教程文档
+- 从基础到进阶，循序渐进
+- 包含原理讲解、代码分析、运行示例
+- 适合 DPDK 零基础学习者
+
+### 🛠️ 现代化构建系统
+
+- 使用 CMake 替代传统 Makefile
+- 自动检测 DPDK 依赖（pkg-config）
 - 统一的编译选项管理
-- 模块化的项目结构
+- 支持 Debug/Release 模式切换
+- 模块化的项目结构，易于扩展
 
-### DPDK 功能覆盖
+### 💡 循序渐进的示例
 
-- **内存管理**: 大页内存、内存池
-- **网络接口**: 网卡初始化、配置
-- **数据包处理**: 接收、解析、转发
-- **多核编程**: lcore 管理、负载均衡
-- **哈希表**: 高性能查找和存储
+| Lesson | 复杂度 | 需要网卡 | 主要内容 |
+|--------|--------|----------|----------|
+| 1 | ⭐ | ❌ | EAL 初始化、多核基础 |
+| 2 | ⭐⭐ | ❌ | 哈希表、数据结构 |
+| 3 | ⭐⭐⭐ | ✅ | 网卡初始化、数据包接收 |
+| 4 | ⭐⭐⭐ | ✅ | 协议解析、字节序转换 |
+| 5 | ⭐⭐ | ❌ | 内存池、性能优化 |
+| 6 | ⭐⭐⭐⭐ | ✅ | 流管理、会话跟踪 |
+| 7 | ⭐⭐⭐⭐ | - | 多进程架构（理论） |
 
-## 学习路径建议
+### 🎯 覆盖核心功能
 
-1. **入门**: 从 `helloworld` 开始，了解 DPDK 基础概念
-2. **进阶**: 学习 `hash_usage`，掌握数据结构和优化技巧
-3. **实战**: 使用 `capture_packet`，体验真实的网络编程
+- ✅ **EAL 初始化**: DPDK 环境抽象层
+- ✅ **内存管理**: 大页内存、内存池（mempool）
+- ✅ **网络接口**: 网卡初始化、端口配置
+- ✅ **数据包处理**: mbuf、接收、解析
+- ✅ **数据结构**: 哈希表（hash）、流管理
+- ✅ **协议解析**: Ethernet、IPv4、TCP/UDP
+- ✅ **多核编程**: lcore 管理
+- ✅ **信号处理**: 优雅退出
 
 ## 故障排除
 
 ### 常见问题
 
-1. **权限问题**: 确保以 root 权限运行
-2. **大页内存**: 检查 `/proc/meminfo` 中的 HugePages 配置
-3. **网卡绑定**: 使用 `dpdk-devbind.py` 工具绑定网卡
-4. **依赖缺失**: 确保 DPDK 开发包正确安装
+#### 1. 编译错误：找不到 DPDK
+
+**错误信息**:
+```
+CMake Error: Could not find DPDK
+```
+
+**解决方案**:
+```bash
+# 检查 DPDK 是否安装
+pkg-config --exists libdpdk && echo "DPDK installed" || echo "DPDK not found"
+
+# 安装 DPDK 开发包
+sudo apt-get install dpdk dpdk-dev
+
+# 或设置 PKG_CONFIG_PATH
+export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
+```
+
+#### 2. 运行错误：权限不足
+
+**错误信息**:
+```
+EAL: Cannot create lock on '/var/run/dpdk/rte/config'
+```
+
+**解决方案**:
+```bash
+# 必须使用 root 权限运行
+sudo ./bin/helloworld -l 0
+
+# 或者配置权限
+sudo chmod 777 /var/run/dpdk
+```
+
+#### 3. 运行错误：大页内存不足
+
+**错误信息**:
+```
+EAL: Cannot get hugepage information
+EAL: Not enough memory available on socket
+```
+
+**解决方案**:
+```bash
+# 检查大页内存配置
+grep Huge /proc/meminfo
+
+# 配置大页内存
+echo 1024 | sudo tee /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+
+# 挂载大页文件系统
+sudo mkdir -p /mnt/huge
+sudo mount -t hugetlbfs nodev /mnt/huge
+```
+
+#### 4. 运行错误：找不到网卡
+
+**错误信息**:
+```
+EAL: No available Ethernet device
+```
+
+**解决方案**:
+
+对于不需要网卡的示例（Lesson 1, 2, 5）:
+```bash
+# 使用 --no-pci 参数
+sudo ./bin/helloworld -l 0 --no-pci
+```
+
+对于需要网卡的示例（Lesson 3, 4, 6）:
+```bash
+# 1. 查看网卡信息
+dpdk-devbind.py --status
+
+# 2. 绑定网卡到 DPDK（示例）
+sudo modprobe uio_pci_generic
+sudo dpdk-devbind.py --bind=uio_pci_generic 0000:01:00.0
+
+# 3. 运行程序
+sudo ./bin/capture_packet -l 0
+```
+
+#### 5. 程序崩溃或段错误
+
+**可能原因**:
+- 内存不足
+- 大页内存配置错误
+- 网卡驱动不兼容
+
+**解决方案**:
+```bash
+# 查看详细日志
+sudo ./bin/capture_packet -l 0 --log-level=8
+
+# 使用 Debug 模式编译
+cd build
+cmake -DCMAKE_BUILD_TYPE=Debug ..
+make
+
+# 使用 gdb 调试
+sudo gdb ./bin/capture_packet
+(gdb) run -l 0
+```
+
+### 网卡绑定详细说明
+
+#### 查看可用网卡
+
+```bash
+# 查看所有网卡状态
+dpdk-devbind.py --status
+
+# 输出示例：
+# Network devices using kernel driver
+# ===================================
+# 0000:01:00.0 'Ethernet Controller' if=eth0 drv=e1000 unused=uio_pci_generic
+```
+
+#### 绑定网卡到 DPDK
+
+```bash
+# 1. 加载 UIO 驱动
+sudo modprobe uio_pci_generic
+
+# 2. 关闭网卡（如果正在使用）
+sudo ifconfig eth0 down
+
+# 3. 绑定网卡
+sudo dpdk-devbind.py --bind=uio_pci_generic 0000:01:00.0
+
+# 4. 验证绑定
+dpdk-devbind.py --status
+```
+
+#### 解绑网卡（恢复系统使用）
+
+```bash
+# 解绑网卡
+sudo dpdk-devbind.py --bind=e1000 0000:01:00.0
+
+# 启动网卡
+sudo ifconfig eth0 up
+```
+
+## 参考资源
+
+### 官方文档
+- [DPDK 官方网站](https://www.dpdk.org/)
+- [DPDK 文档](https://doc.dpdk.org/)
+- [DPDK API 参考](https://doc.dpdk.org/api/)
+- [DPDK 编程指南](https://doc.dpdk.org/guides/prog_guide/)
+
+### 学习资源
+- [DPDK Sample Applications](https://doc.dpdk.org/guides/sample_app_ug/)
+- [DPDK Getting Started Guide](https://doc.dpdk.org/guides/linux_gsg/)
+- [DPDK Blog](https://www.dpdk.org/blog/)
+
+### 社区
+- [DPDK Mailing List](https://mailing.dpdk.org/listinfo)
+- [DPDK Slack](https://dpdkio.slack.com/)
+- [DPDK GitHub](https://github.com/DPDK/dpdk)
+
+## 贡献指南
+
+欢迎贡献代码、报告问题或提出改进建议！
+
+### 如何贡献
+
+1. Fork 本项目
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 创建 Pull Request
+
+### 贡献方向
+
+- 添加新的示例程序
+- 改进现有教程文档
+- 修复 bug
+- 优化代码性能
+- 翻译文档（英文等）
+- 添加测试用例
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE) 许可证。
+
+## 致谢
+
+感谢 DPDK 社区提供的强大框架和详细文档。
+
+---
+
+**祝学习愉快！如有问题，欢迎提 Issue！** 🚀
