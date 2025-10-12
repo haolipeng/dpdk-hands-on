@@ -25,7 +25,6 @@
 | **资源管理** | ✅ 操作系统级别隔离 | ⚠️ 需要应用层管理 |
 
 **典型应用场景：**
-- 网络功能虚拟化（NFV）：多个网络功能独立运行
 - 流水线处理架构：收包、解析、转发分离
 - 热插拔模块：在线更新处理逻辑而不中断数据平面
 
@@ -155,6 +154,89 @@ examples/multi_process/client_server_mp/
    ```
    Port 0 RX → Server → Ring[client_id] → Client → Port 1 TX
    ```
+
+### 2.4 示例代码运行指南
+
+#### 编译示例
+
+```bash
+# 进入DPDK源码目录
+cd dpdk
+
+# 使用meson编译
+meson build
+cd build
+ninja
+
+# 示例程序位置
+# Server: build/examples/dpdk-mp_server
+# Client: build/examples/dpdk-mp_client
+```
+
+#### 运行Server进程
+
+```bash
+# 启动Server（Primary进程）
+sudo ./build/examples/dpdk-mp_server \
+    -l 1-2 \              # 使用核心1-2
+    -n 4 \                # 内存通道数
+    -- \
+    -p 0x3 \              # 端口掩码（使用端口0和1）
+    -n 2                  # 支持2个Client进程
+```
+
+**参数说明：**
+- `-l 1-2`: 使用CPU核心1和2
+- `-p 0x3`: 端口掩码，二进制`11`表示使用端口0和1
+- `-n 2`: 创建2个Client的Ring队列
+
+#### 运行Client进程
+
+**启动Client 0：**
+```bash
+sudo ./build/examples/dpdk-mp_client \
+    -l 3 \                      # 使用核心3
+    --proc-type=auto \          # 自动识别为Secondary
+    -- \
+    -n 0                        # Client ID为0
+```
+
+**启动Client 1：**
+```bash
+sudo ./build/examples/dpdk-mp_client \
+    -l 4 \                      # 使用核心4
+    --proc-type=auto \          # 自动识别为Secondary
+    -- \
+    -n 1                        # Client ID为1
+```
+
+#### 查看运行状态
+
+Server输出示例：
+```
+EAL: Detected 8 lcore(s)
+EAL: Probing VFIO support...
+PORT 0: 00:11:22:33:44:55
+PORT 1: 00:11:22:33:44:66
+
+Creating ring 'MProc_Client_RX_0'
+Creating ring 'MProc_Client_RX_1'
+
+Client process 0 connected
+Client process 1 connected
+
+[Port 0] RX: 1000 packets, distributed to clients
+```
+
+Client输出示例：
+```
+Client process 0 starting...
+Looking up mempool: mbuf_pool
+Looking up ring: MProc_Client_RX_0
+
+Received 500 packets from server
+Forwarded 500 packets to port 1
+```
 
 ---
 
@@ -326,94 +408,9 @@ nb_tx = rte_eth_tx_burst(port_id, queue_id, bufs, nb_pkts);
 
 ---
 
-## 四、示例代码运行指南
+## 四、代码分析：关键实现
 
-### 4.1 编译示例
-
-```bash
-# 进入DPDK源码目录
-cd dpdk
-
-# 使用meson编译
-meson build
-cd build
-ninja
-
-# 示例程序位置
-# Server: build/examples/dpdk-mp_server
-# Client: build/examples/dpdk-mp_client
-```
-
-### 4.2 运行Server进程
-
-```bash
-# 启动Server（Primary进程）
-sudo ./build/examples/dpdk-mp_server \
-    -l 1-2 \              # 使用核心1-2
-    -n 4 \                # 内存通道数
-    -- \
-    -p 0x3 \              # 端口掩码（使用端口0和1）
-    -n 2                  # 支持2个Client进程
-```
-
-**参数说明：**
-- `-l 1-2`: 使用CPU核心1和2
-- `-p 0x3`: 端口掩码，二进制`11`表示使用端口0和1
-- `-n 2`: 创建2个Client的Ring队列
-
-### 4.3 运行Client进程
-
-**启动Client 0：**
-```bash
-sudo ./build/examples/dpdk-mp_client \
-    -l 3 \                      # 使用核心3
-    --proc-type=auto \          # 自动识别为Secondary
-    -- \
-    -n 0                        # Client ID为0
-```
-
-**启动Client 1：**
-```bash
-sudo ./build/examples/dpdk-mp_client \
-    -l 4 \                      # 使用核心4
-    --proc-type=auto \          # 自动识别为Secondary
-    -- \
-    -n 1                        # Client ID为1
-```
-
-### 4.4 查看运行状态
-
-Server输出示例：
-```
-EAL: Detected 8 lcore(s)
-EAL: Probing VFIO support...
-PORT 0: 00:11:22:33:44:55
-PORT 1: 00:11:22:33:44:66
-
-Creating ring 'MProc_Client_RX_0'
-Creating ring 'MProc_Client_RX_1'
-
-Client process 0 connected
-Client process 1 connected
-
-[Port 0] RX: 1000 packets, distributed to clients
-```
-
-Client输出示例：
-```
-Client process 0 starting...
-Looking up mempool: mbuf_pool
-Looking up ring: MProc_Client_RX_0
-
-Received 500 packets from server
-Forwarded 500 packets to port 1
-```
-
----
-
-## 五、代码分析：关键实现
-
-### 5.1 Server端核心代码结构
+### 4.1 Server端核心代码结构
 
 ```c
 // mp_server/main.c
@@ -460,7 +457,7 @@ int main(int argc, char **argv)
 }
 ```
 
-### 5.2 Client端核心代码结构
+### 4.2 Client端核心代码结构
 
 ```c
 // mp_client/client.c
@@ -506,7 +503,7 @@ int main(int argc, char **argv)
 }
 ```
 
-### 5.3 共享数据结构定义
+### 4.3 共享数据结构定义
 
 ```c
 // shared/common.h
@@ -533,7 +530,7 @@ struct shared_info {
 
 ---
 
-## 六、实验任务
+## 五、实验任务
 
 ### 任务1：运行官方示例（基础）
 
@@ -541,7 +538,7 @@ struct shared_info {
 
 **步骤：**
 1. 编译DPDK官方示例
-2. 按照4.2-4.3节的命令启动Server和2个Client
+2. 按照2.4节的命令启动Server和2个Client
 3. 使用`pktgen-dpdk`或`tcpreplay`发送测试流量
 4. 观察Server和Client的统计输出
 
@@ -587,9 +584,9 @@ uint32_t client_id = hash % num_clients;
 
 ---
 
-## 七、常见问题与最佳实践
+## 六、常见问题与最佳实践
 
-### 7.1 常见错误
+### 6.1 常见错误
 
 #### 错误1：Secondary进程启动失败
 ```
@@ -629,7 +626,7 @@ if (usage > 0.9f) {
 }
 ```
 
-### 7.2 性能优化建议
+### 6.2 性能优化建议
 
 #### 优化1：合理选择Ring大小
 ```c
@@ -676,7 +673,7 @@ struct rte_ether_hdr *eth = rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr *);
 // 直接修改eth字段
 ```
 
-### 7.3 生产环境部署建议
+### 6.3 生产环境部署建议
 
 #### 建议1：优雅退出流程
 ```c
@@ -730,9 +727,9 @@ rte_log_set_level(RTE_LOGTYPE_APP, RTE_LOG_DEBUG);
 
 ---
 
-## 八、进阶主题
+## 七、进阶主题
 
-### 8.1 进程间控制消息（rte_mp）
+### 7.1 进程间控制消息（rte_mp）
 
 除了Ring队列传递数据包，DPDK还提供了`rte_mp`机制用于控制消息：
 
@@ -770,7 +767,7 @@ if (ret == 0) {
 }
 ```
 
-### 8.2 Multi-Producer/Multi-Consumer场景
+### 7.2 Multi-Producer/Multi-Consumer场景
 
 如果多个进程同时写入Ring，需要使用MP模式：
 
@@ -790,7 +787,7 @@ ring = rte_ring_create("mp_ring", RING_SIZE, socket_id,
 | SP-MC | 中等 | 单一生产者，多个消费者 |
 | MP-MC | 较低 | 多个生产者和消费者 |
 
-### 8.3 NUMA感知优化
+### 7.3 NUMA感知优化
 
 ```c
 // 查询端口所在的NUMA节点
@@ -809,9 +806,9 @@ struct rte_mempool *pool = rte_pktmbuf_pool_create(
 
 ---
 
-## 九、课程总结
+## 八、课程总结
 
-### 9.1 关键知识点回顾
+### 8.1 关键知识点回顾
 
 1. **多进程架构优势：** 故障隔离、模块化部署
 2. **Primary vs Secondary：** 职责划分清晰
@@ -819,7 +816,7 @@ struct rte_mempool *pool = rte_pktmbuf_pool_create(
 4. **Ring队列：** 高性能无锁进程间通信
 5. **对象查找机制：** 通过名称共享mempool、ring等
 
-### 9.2 最佳实践总结
+### 8.2 最佳实践总结
 
 ✅ **DO（推荐做法）：**
 - Primary负责创建，Secondary负责查找
@@ -835,13 +832,13 @@ struct rte_mempool *pool = rte_pktmbuf_pool_create(
 - 不要忽略Ring满的情况
 - 不要跨NUMA访问内存
 
-### 9.3 学习资源
+### 8.3 学习资源
 
 - **DPDK官方文档：** https://doc.dpdk.org/guides/sample_app_ug/multi_process.html
 - **示例源码：** `dpdk/examples/multi_process/`
 - **API参考：** https://doc.dpdk.org/api/
 
-### 9.4 下一步学习方向
+### 8.4 下一步学习方向
 
 - **课程8：** DPDK QoS和流量管理
 - **课程9：** DPDK加密和安全加速
@@ -926,6 +923,363 @@ sudo perf report
 
 ---
 
+## 九、动手实战：三个递进式实验
+
+为了帮助新手更好地掌握DPDK多进程编程,本课程提供了3个递进式的实战实验。
+
+### 9.1 实验目录结构
+
+```
+7-multiprocess/
+├── basic/              # 实验1:基础Primary-Secondary示例
+│   ├── primary.c       # Primary进程
+│   ├── secondary.c     # Secondary进程
+│   └── common.h        # 共享定义
+├── ring_comm/          # 实验2:Ring双向通信
+│   ├── sender.c        # Sender进程(Primary)
+│   ├── receiver.c      # Receiver进程(Secondary)
+│   └── common.h        # 共享定义
+├── client_server/      # 实验3:Client-Server架构
+│   ├── server.c        # Server进程(Primary)
+│   ├── client.c        # Client进程(Secondary)
+│   └── common.h        # 共享定义
+├── CMakeLists.txt      # 构建配置
+├── setup.sh            # 自动化脚本
+└── README.md           # 详细实验指南
+```
+
+### 9.2 快速开始
+
+#### 方法1: 使用自动化脚本(推荐)
+
+```bash
+cd 7-multiprocess
+sudo ./setup.sh
+```
+
+脚本提供交互式菜单:
+1. 检查环境和编译
+2. 运行实验1 (基础Primary-Secondary)
+3. 运行实验2 (Ring双向通信)
+4. 运行实验3 (Client-Server架构)
+5. 清理共享内存
+
+#### 方法2: 手动编译
+
+```bash
+cd 7-multiprocess
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
+
+# 可执行文件生成在 build/bin/ 目录
+ls -lh bin/
+```
+
+### 9.3 实验1: 基础Primary-Secondary示例 ⭐
+
+**学习目标:**
+- 理解Primary和Secondary进程的角色区别
+- 掌握共享对象的创建和查找
+- 实现单向消息传递
+
+**运行步骤:**
+
+```bash
+# 终端1: 启动Primary进程
+sudo ./build/bin/mp_basic_primary -l 0 --no-huge
+
+# 终端2: 启动Secondary进程
+sudo ./build/bin/mp_basic_secondary -l 1 --proc-type=secondary --no-huge
+```
+
+**预期输出:**
+
+Primary终端将显示:
+```
+步骤1: Primary进程初始化EAL...
+✓ EAL初始化成功 (进程类型: PRIMARY)
+
+步骤2: 创建共享内存池 (名称: mp_basic_pool)...
+✓ 内存池创建成功
+  - 对象数量: 512
+  - 对象大小: 64 字节
+
+步骤3: 创建共享Ring队列 (名称: mp_basic_ring)...
+✓ Ring队列创建成功
+  - Ring大小: 256
+
+[Primary] 发送消息 #0: Hello from Primary #0
+[Primary] 发送消息 #1: Hello from Primary #1
+```
+
+Secondary终端将显示:
+```
+步骤1: Secondary进程初始化EAL...
+✓ EAL初始化成功 (进程类型: SECONDARY)
+
+步骤2: 查找Primary创建的内存池...
+✓ 内存池查找成功
+
+步骤3: 查找Primary创建的Ring队列...
+✓ Ring队列查找成功
+
+[Secondary] 接收消息 #0 (总计: 1)
+            发送者ID: 0
+            数据: Hello from Primary #0
+```
+
+**关键代码对比:**
+
+```c
+// Primary进程 - 创建共享对象
+struct rte_mempool *mp = rte_mempool_create(
+    MEMPOOL_NAME, NUM_MBUFS, OBJ_SIZE, ...);
+
+struct rte_ring *ring = rte_ring_create(
+    RING_NAME, RING_SIZE, ...);
+
+// Secondary进程 - 查找共享对象
+struct rte_mempool *mp = rte_mempool_lookup(MEMPOOL_NAME);
+struct rte_ring *ring = rte_ring_lookup(RING_NAME);
+```
+
+**思考题:**
+1. 如果先启动Secondary会怎样?
+2. Primary退出后Secondary还能运行吗?
+3. 如何支持多个Secondary进程?
+
+### 9.4 实验2: Ring双向通信示例 ⭐⭐
+
+**学习目标:**
+- 掌握双向Ring队列的创建和使用
+- 实现Ping-Pong通信模式
+- 测量往返时延(RTT)
+
+**架构图:**
+
+```
+┌─────────────┐                    ┌─────────────┐
+│   Sender    │                    │  Receiver   │
+│  (Primary)  │                    │ (Secondary) │
+└──────┬──────┘                    └──────┬──────┘
+       │                                  │
+       │  Ring: P2S                       │
+       ├─────────────Ping──────────────>  │
+       │                                  │
+       │  Ring: S2P                       │
+       │  <─────────────Pong──────────────┤
+```
+
+**运行步骤:**
+
+```bash
+# 终端1: 启动Sender进程
+sudo ./build/bin/mp_ring_sender -l 0 --no-huge
+
+# 终端2: 启动Receiver进程
+sudo ./build/bin/mp_ring_receiver -l 1 --proc-type=secondary --no-huge
+```
+
+**预期输出:**
+
+Sender终端:
+```
+创建双向Ring队列...
+✓ Ring (Primary->Secondary) 创建成功
+✓ Ring (Secondary->Primary) 创建成功
+
+[Sender] 发送 Ping #0
+[Sender] 接收 Pong #0 (RTT: 1234 us)
+         内容: Pong #0 from Secondary
+
+--- 统计 (Sender) ---
+发送Ping: 5
+收到Pong: 5
+丢失率: 0.00%
+```
+
+Receiver终端:
+```
+查找双向Ring队列...
+✓ Ring (Primary->Secondary) 查找成功
+✓ Ring (Secondary->Primary) 查找成功
+
+[Receiver] 接收 Ping #0
+           内容: Ping #0 from Primary
+[Receiver] 回复 Pong #0
+```
+
+**关键技术点:**
+- 双向通信需要两个Ring队列
+- RTT测量: 在Ping消息中携带时间戳,Pong原样返回
+- 批量操作提高性能
+
+**思考题:**
+1. 为什么需要两个Ring而不是一个?
+2. 如何优化RTT?
+3. 如果Ring满了会发生什么?
+
+### 9.5 实验3: Client-Server架构 ⭐⭐⭐
+
+**学习目标:**
+- 掌握实际的多进程架构设计
+- 实现负载均衡(Round-Robin)
+- 支持多个Client并行处理
+
+**架构图:**
+
+```
+                    Packet Generator
+                           │
+                    ┌──────▼──────┐
+                    │   Server    │
+                    │  (Primary)  │
+                    └──────┬──────┘
+                           │
+           ┌───────────────┼───────────────┐
+           │               │               │
+    ┌──────▼──────┐ ┌─────▼──────┐ ┌─────▼──────┐
+    │  Client 0   │ │  Client 1  │ │  Client N  │
+    │(Secondary)  │ │(Secondary) │ │(Secondary) │
+    └─────────────┘ └────────────┘ └────────────┘
+          │               │               │
+          └───────────────┴───────────────┘
+                  (并行处理数据包)
+```
+
+**运行步骤:**
+
+```bash
+# 终端1: 启动Server (支持2个Client)
+sudo ./build/bin/mp_cs_server -l 0 --no-huge -- -n 2
+
+# 终端2: 启动Client 0
+sudo ./build/bin/mp_cs_client -l 1 --proc-type=secondary --no-huge -- -n 0
+
+# 终端3: 启动Client 1
+sudo ./build/bin/mp_cs_client -l 2 --proc-type=secondary --no-huge -- -n 1
+```
+
+**预期输出:**
+
+Server终端:
+```
+配置: 2 个Client进程
+
+步骤1: 创建packet mbuf内存池...
+✓ Mbuf pool创建成功 (总mbuf: 16382)
+
+步骤2: 为每个Client创建Ring队列...
+✓ Ring 'cs_client_ring_0' 创建成功
+✓ Ring 'cs_client_ring_1' 创建成功
+
+Server开始生成并分发数据包...
+
+--- Server统计 ---
+已生成数据包: 3200
+Mbuf可用: 14500
+Client 0 Ring使用: 50/2048
+Client 1 Ring使用: 45/2048
+```
+
+Client终端:
+```
+Client ID: 0
+
+步骤1: 查找共享mbuf内存池...
+✓ Mbuf pool查找成功
+
+步骤2: 查找自己的Ring队列...
+✓ Ring 'cs_client_ring_0' 查找成功
+
+[Client 0] 处理包 #0
+           时间戳: 123456789
+           内容: Packet #0 for Client 0
+
+--- Client 0 统计 ---
+已接收数据包: 1600
+Ring使用: 32/2048
+```
+
+**负载均衡策略:**
+
+Server使用简单的Round-Robin轮询:
+```c
+next_client = (next_client + 1) % num_clients;
+rte_ring_enqueue_burst(client_rings[next_client], pkts, BURST_SIZE);
+```
+
+**扩展思考:**
+1. 如何改成基于Hash的分发? (提示: 5元组哈希)
+2. 如何支持Client动态加入/退出?
+3. 如何监控各Client的负载?
+
+### 9.6 实验资源
+
+**完整实验指南:** [7-multiprocess/README.md](7-multiprocess/README.md)
+
+**源代码位置:**
+- 实验1: [7-multiprocess/basic/](7-multiprocess/basic/)
+- 实验2: [7-multiprocess/ring_comm/](7-multiprocess/ring_comm/)
+- 实验3: [7-multiprocess/client_server/](7-multiprocess/client_server/)
+
+**自动化脚本:** [7-multiprocess/setup.sh](7-multiprocess/setup.sh)
+
+### 9.7 学习路径建议
+
+**初级(第1周):**
+1. ✅ 完成实验1,理解基础概念
+2. ✅ 修改实验1,尝试多个Secondary进程
+3. ✅ 阅读本课程理论部分
+
+**中级(第2周):**
+1. ✅ 完成实验2,理解双向通信
+2. ✅ 测量不同Ring大小下的RTT
+3. ✅ 实现基于Hash的消息路由
+
+**高级(第3周):**
+1. ✅ 完成实验3,理解生产架构
+2. ✅ 修改为基于5元组Hash的分发
+3. ✅ 实现Client动态管理(心跳机制)
+
+### 9.8 常见问题
+
+#### Q: 编译错误 "cannot find -ldpdk"
+**A:** 检查DPDK是否安装:
+```bash
+pkg-config --modversion libdpdk
+sudo apt-get install dpdk dpdk-dev  # 如果未安装
+```
+
+#### Q: 运行时错误 "Cannot init EAL"
+**A:** 尝试以下方案:
+1. 使用`sudo`运行
+2. 使用`--no-huge`参数(测试时方便)
+3. 配置hugepage: `echo 512 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages`
+
+#### Q: Secondary找不到共享对象
+**A:** 检查:
+- Primary进程是否已经启动?
+- 是否使用了`--proc-type=secondary`?
+- 对象名称是否一致?
+
+---
+
+## 十、进阶挑战
+
+完成基础实验后,尝试这些挑战:
+
+1. **实现流表管理:** 在Client中维护5元组流表,统计每个流的包数
+2. **添加控制平面:** 使用`rte_mp`实现进程间控制消息
+3. **性能测试:** 测试不同配置下的吞吐量和延迟
+4. **实现QoS:** 为不同优先级的流分配不同的Client
+5. **故障恢复:** 实现Client崩溃后的自动重启
+
+---
+
 **课程结束，感谢学习！**
 
 如有问题，请参考DPDK官方文档或在GitHub提Issue。
+
+**实战实验文档:** [7-multiprocess/README.md](7-multiprocess/README.md)
