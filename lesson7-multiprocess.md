@@ -160,24 +160,32 @@ examples/multi_process/client_server_mp/
 #### 编译示例
 
 ```bash
-# 进入DPDK源码目录
-cd dpdk
+# 方法1: 使用Makefile编译(推荐)
+cd /path/to/dpdk-stable-24.11.1/examples/multi_process/client_server_mp
 
-# 使用meson编译
+# 编译Server
+cd mp_server
+make
+# 生成: build/mp_server
+
+# 编译Client
+cd ../mp_client
+make
+# 生成: build/mp_client
+
+# 方法2: 使用meson编译整个DPDK(会包含所有示例)
+cd /path/to/dpdk-stable-24.11.1
 meson build
 cd build
 ninja
-
-# 示例程序位置
-# Server: build/examples/dpdk-mp_server
-# Client: build/examples/dpdk-mp_client
+# 生成: build/examples/dpdk-mp_server, dpdk-mp_client
 ```
 
 #### 运行Server进程
 
 ```bash
 # 启动Server（Primary进程）
-sudo ./build/examples/dpdk-mp_server \
+sudo ./mp_server/build/mp_server \
     -l 1-2 \              # 使用核心1-2
     -n 4 \                # 内存通道数
     -- \
@@ -194,7 +202,7 @@ sudo ./build/examples/dpdk-mp_server \
 
 **启动Client 0：**
 ```bash
-sudo ./build/examples/dpdk-mp_client \
+sudo ./mp_client/build/mp_client \
     -l 3 \                      # 使用核心3
     --proc-type=auto \          # 自动识别为Secondary
     -- \
@@ -203,7 +211,7 @@ sudo ./build/examples/dpdk-mp_client \
 
 **启动Client 1：**
 ```bash
-sudo ./build/examples/dpdk-mp_client \
+sudo ./mp_client/build/mp_client \
     -l 4 \                      # 使用核心4
     --proc-type=auto \          # 自动识别为Secondary
     -- \
@@ -408,125 +416,599 @@ nb_tx = rte_eth_tx_burst(port_id, queue_id, bufs, nb_pkts);
 
 ---
 
-## 四、代码分析：关键实现
+## 四、官方示例代码深度分析
 
-### 4.1 Server端核心代码结构
+本节基于DPDK官方`client_server_mp`示例进行详细分析,源码位于:
+`/home/work/dpdk-stable-24.11.1/examples/multi_process/client_server_mp/`
+
+### 4.1 Server端完整流程分析
+
+#### 4.1.1 主程序入口 ([mp_server/main.c:290-313](mp_server/main.c#L290-L313))
 
 ```c
-// mp_server/main.c
-
-int main(int argc, char **argv)
+int main(int argc, char *argv[])
 {
-    // 1. 初始化EAL（默认为Primary）
-    ret = rte_eal_init(argc, argv);
+    signal(SIGINT, signal_handler);
 
-    // 2. 解析应用参数
-    parse_app_args(argc, argv);  // 获取端口掩码、Client数量
+    // 1. 初始化系统(包含EAL、端口、Ring等)
+    if (init(argc, argv) < 0)
+        return -1;
+    RTE_LOG(INFO, APP, "Finished Process Init.\n");
 
-    // 3. 创建共享内存池
-    pktmbuf_pool = rte_pktmbuf_pool_create("mbuf_pool", ...);
+    // 2. 为每个Client分配RX缓冲区
+    cl_rx_buf = calloc(num_clients, sizeof(cl_rx_buf[0]));
 
-    // 4. 初始化网络端口
-    for (each port) {
-        init_port(port_id, pktmbuf_pool);
+    // 3. 清除统计数据
+    clear_stats();
+
+    // 4. 启动其他核心用于统计显示
+    rte_eal_mp_remote_launch(sleep_lcore, NULL, SKIP_MAIN);
+
+    // 5. 主核心执行数据包转发
+    do_packet_forwarding();
+
+    // 6. 清理资源
+    rte_eal_cleanup();
+    return 0;
+}
+```
+
+#### 4.1.2 初始化流程 ([mp_server/init.c:244-289](mp_server/init.c#L244-L289))
+
+```c
+int init(int argc, char *argv[])
+{
+    int retval;
+    const struct rte_memzone *mz;
+    uint16_t i;
+
+    // 1. 初始化EAL(默认为Primary进程)
+    retval = rte_eal_init(argc, argv);
+    if (retval < 0)
+        return -1;
+    argc -= retval;
+    argv += retval;
+
+    // 2. 在共享内存中创建端口信息结构(使用memzone)
+    mz = rte_memzone_reserve(MZ_PORT_INFO, sizeof(*ports),
+                            rte_socket_id(), NO_FLAGS);
+    if (mz == NULL)
+        rte_exit(EXIT_FAILURE, "Cannot reserve memory zone for port information\n");
+    memset(mz->addr, 0, sizeof(*ports));
+    ports = mz->addr;
+
+    // 3. 解析应用参数(-p端口掩码, -n客户端数量)
+    retval = parse_app_args(argc, argv);
+    if (retval != 0)
+        return -1;
+
+    // 4. 创建共享mbuf内存池
+    retval = init_mbuf_pools();
+    if (retval != 0)
+        rte_exit(EXIT_FAILURE, "Cannot create needed mbuf pools\n");
+
+    // 5. 初始化所有网络端口
+    for (i = 0; i < ports->num_ports; i++) {
+        retval = init_port(ports->id[i]);
+        if (retval != 0)
+            rte_exit(EXIT_FAILURE, "Cannot initialise port %u\n", (unsigned)i);
     }
 
-    // 5. 为每个Client创建Ring队列
-    for (i = 0; i < num_clients; i++) {
-        char ring_name[32];
-        snprintf(ring_name, sizeof(ring_name), "MProc_Client_RX_%d", i);
+    check_all_ports_link_status(ports->num_ports, (~0x0));
 
-        client_rings[i] = rte_ring_create(ring_name, RING_SIZE,
-                                          rte_socket_id(),
-                                          RING_F_SP_ENQ | RING_F_SC_DEQ);
-    }
-
-    // 6. 主循环：接收和分发数据包
-    while (!force_quit) {
-        // 从端口接收包
-        nb_rx = rte_eth_rx_burst(port_id, 0, bufs, BURST_SIZE);
-
-        // 分发到Client（简单轮询策略）
-        for (i = 0; i < nb_rx; i++) {
-            client_id = i % num_clients;  // 轮询分配
-            rte_ring_enqueue(client_rings[client_id], bufs[i]);
-        }
-    }
+    // 6. 为每个Client创建Ring队列
+    init_shm_rings();
 
     return 0;
 }
 ```
 
-### 4.2 Client端核心代码结构
+**关键设计点:**
+- **Memzone:** 使用`rte_memzone_reserve()`在hugepage中创建共享的port_info结构
+- **共享命名:** `MZ_PORT_INFO = "MProc_port_info"` 作为共享对象名称
+
+#### 4.1.3 创建共享内存池 ([mp_server/init.c:62-82](mp_server/init.c#L62-L82))
 
 ```c
-// mp_client/client.c
-
-int main(int argc, char **argv)
+static int init_mbuf_pools(void)
 {
-    // 1. 初始化EAL（Secondary进程）
-    ret = rte_eal_init(argc, argv);  // 带--proc-type=secondary
+    // 计算所需mbuf总数
+    const unsigned int num_mbufs_server =
+        RTE_MP_RX_DESC_DEFAULT * ports->num_ports;  // Server RX需求
+    const unsigned int num_mbufs_client =
+        num_clients * (CLIENT_QUEUE_RINGSIZE +
+                       RTE_MP_TX_DESC_DEFAULT * ports->num_ports);  // Client TX需求
+    const unsigned int num_mbufs_mp_cache =
+        (num_clients + 1) * MBUF_CACHE_SIZE;  // 各进程的per-core缓存
+    const unsigned int num_mbufs =
+        num_mbufs_server + num_mbufs_client + num_mbufs_mp_cache;
+
+    printf("Creating mbuf pool '%s' [%u mbufs] ...\n",
+            PKTMBUF_POOL_NAME, num_mbufs);
+
+    pktmbuf_pool = rte_pktmbuf_pool_create(PKTMBUF_POOL_NAME, num_mbufs,
+        MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
+
+    return pktmbuf_pool == NULL; /* 0 on success */
+}
+```
+
+**内存规划:**
+- Server RX: `1024 * 端口数` (每个端口1024个RX描述符)
+- Client TX: `num_clients * (128 + 1024 * 端口数)` (Ring缓冲 + TX描述符)
+- Cache: `(num_clients + 1) * 512` (每个进程的per-core缓存)
+
+#### 4.1.4 端口初始化 ([mp_server/init.c:92-144](mp_server/init.c#L92-L144))
+
+```c
+static int init_port(uint16_t port_num)
+{
+    const struct rte_eth_conf port_conf = {
+        .rxmode = {
+            .mq_mode = RTE_ETH_MQ_RX_RSS  // 启用RSS
+        }
+    };
+    const uint16_t rx_rings = 1;  // Server使用1个RX队列
+    const uint16_t tx_rings = num_clients;  // 每个Client一个TX队列
+
+    uint16_t rx_ring_size = RTE_MP_RX_DESC_DEFAULT;
+    uint16_t tx_ring_size = RTE_MP_TX_DESC_DEFAULT;
+    uint16_t q;
+    int retval;
+
+    // 配置端口: 1个RX队列, N个TX队列
+    if ((retval = rte_eth_dev_configure(port_num, rx_rings, tx_rings,
+        &port_conf)) != 0)
+        return retval;
+
+    // 调整队列大小以匹配硬件能力
+    retval = rte_eth_dev_adjust_nb_rx_tx_desc(port_num, &rx_ring_size,
+            &tx_ring_size);
+
+    // 设置RX队列(Server专用)
+    for (q = 0; q < rx_rings; q++) {
+        retval = rte_eth_rx_queue_setup(port_num, q, rx_ring_size,
+                rte_eth_dev_socket_id(port_num),
+                NULL, pktmbuf_pool);
+        if (retval < 0) return retval;
+    }
+
+    // 设置TX队列(每个Client一个)
+    for (q = 0; q < tx_rings; q++) {
+        retval = rte_eth_tx_queue_setup(port_num, q, tx_ring_size,
+                rte_eth_dev_socket_id(port_num),
+                NULL);
+        if (retval < 0) return retval;
+    }
+
+    // 启用混杂模式
+    retval = rte_eth_promiscuous_enable(port_num);
+
+    // 启动端口
+    retval = rte_eth_dev_start(port_num);
+
+    return 0;
+}
+```
+
+**队列设计:**
+- **1个RX队列:** Server独占,接收所有数据包
+- **N个TX队列:** 每个Client使用独立的TX队列,避免竞争
+
+#### 4.1.5 创建Ring队列 ([mp_server/init.c:152-176](mp_server/init.c#L152-L176))
+
+```c
+static int init_shm_rings(void)
+{
+    unsigned i;
+    unsigned socket_id;
+    const char *q_name;
+    const unsigned ringsize = CLIENT_QUEUE_RINGSIZE;  // 128
+
+    // 分配Client数组
+    clients = rte_malloc("client details",
+        sizeof(*clients) * num_clients, 0);
+    if (clients == NULL)
+        rte_exit(EXIT_FAILURE, "Cannot allocate memory for client program details\n");
+
+    for (i = 0; i < num_clients; i++) {
+        socket_id = rte_socket_id();
+        q_name = get_rx_queue_name(i);  // "MProc_Client_%u_RX"
+
+        // 创建Ring: 单生产者(Server) + 单消费者(Client)
+        clients[i].rx_q = rte_ring_create(q_name,
+                ringsize, socket_id,
+                RING_F_SP_ENQ | RING_F_SC_DEQ);
+
+        if (clients[i].rx_q == NULL)
+            rte_exit(EXIT_FAILURE, "Cannot create rx ring queue for client %u\n", i);
+    }
+    return 0;
+}
+```
+
+**Ring标志说明:**
+- `RING_F_SP_ENQ`: Single Producer - Server是唯一的生产者
+- `RING_F_SC_DEQ`: Single Consumer - 每个Client是唯一的消费者
+
+#### 4.1.6 数据包转发主循环 ([mp_server/main.c:254-275](mp_server/main.c#L254-L275))
+
+```c
+static void do_packet_forwarding(void)
+{
+    unsigned port_num = 0;  // 当前处理的端口索引
+
+    for (;;) {
+        struct rte_mbuf *buf[PACKET_READ_SIZE];  // 32个包的burst
+        uint16_t rx_count;
+
+        // 从当前端口接收数据包
+        rx_count = rte_eth_rx_burst(ports->id[port_num], 0,
+                buf, PACKET_READ_SIZE);
+        ports->rx_stats.rx[port_num] += rx_count;
+
+        // 处理并分发到Client
+        if (likely(rx_count > 0))
+            process_packets(port_num, buf, rx_count);
+
+        // 轮转到下一个端口(轮询所有端口)
+        if (++port_num == ports->num_ports)
+            port_num = 0;
+    }
+}
+```
+
+**轮询策略:** Server轮询所有端口,而不是阻塞在单个端口上
+
+#### 4.1.7 负载均衡策略 ([mp_server/main.c:232-248](mp_server/main.c#L232-L248))
+
+```c
+static void process_packets(uint32_t port_num __rte_unused,
+        struct rte_mbuf *pkts[], uint16_t rx_count)
+{
+    uint16_t i;
+    static uint8_t client = 0;  // 轮询计数器
+
+    // Round-Robin分发
+    for (i = 0; i < rx_count; i++) {
+        enqueue_rx_packet(client, pkts[i]);  // 加入本地缓冲
+
+        // 轮转到下一个Client
+        if (++client == num_clients)
+            client = 0;
+    }
+
+    // 批量发送到各Client的Ring
+    for (i = 0; i < num_clients; i++)
+        flush_rx_queue(i);
+}
+```
+
+#### 4.1.8 批量入队优化 ([mp_server/main.c:196-216](mp_server/main.c#L196-L216))
+
+```c
+static void flush_rx_queue(uint16_t client)
+{
+    uint16_t j;
+    struct client *cl;
+
+    if (cl_rx_buf[client].count == 0)
+        return;
+
+    cl = &clients[client];
+
+    // 批量入队到Ring
+    if (rte_ring_enqueue_bulk(cl->rx_q,
+            (void **)cl_rx_buf[client].buffer,
+            cl_rx_buf[client].count, NULL) == 0) {
+        // 入队失败(Ring满),释放数据包
+        for (j = 0; j < cl_rx_buf[client].count; j++)
+            rte_pktmbuf_free(cl_rx_buf[client].buffer[j]);
+        cl->stats.rx_drop += cl_rx_buf[client].count;
+    } else {
+        cl->stats.rx += cl_rx_buf[client].count;
+    }
+
+    cl_rx_buf[client].count = 0;
+}
+```
+
+**性能优化技巧:**
+1. **本地缓冲:** 先缓存到`cl_rx_buf`,再批量enqueue
+2. **Bulk操作:** 使用`rte_ring_enqueue_bulk()`而非单个enqueue
+3. **失败处理:** Ring满时释放mbuf,避免内存泄漏
+
+### 4.2 Client端完整流程分析
+
+#### 4.2.1 主程序入口 ([mp_client/client.c:203-273](mp_client/client.c#L203-L273))
+
+```c
+int main(int argc, char *argv[])
+{
+    const struct rte_memzone *mz;
+    struct rte_ring *rx_ring;
+    struct rte_mempool *mp;
+    struct port_info *ports;
+    int need_flush = 0;
+    int retval;
+    void *pkts[PKT_READ_SIZE];
+    uint16_t sent;
+
+    // 1. 初始化EAL(Secondary进程)
+    if ((retval = rte_eal_init(argc, argv)) < 0)
+        return -1;
+    argc -= retval;
+    argv += retval;
 
     // 2. 解析Client ID
-    parse_app_args(argc, argv);  // 获取-n参数
+    if (parse_app_args(argc, argv) < 0)
+        rte_exit(EXIT_FAILURE, "Invalid command-line arguments\n");
 
-    // 3. 查找Server创建的内存池
-    pktmbuf_pool = rte_mempool_lookup("mbuf_pool");
-    if (pktmbuf_pool == NULL)
-        rte_exit(EXIT_FAILURE, "Cannot find mbuf pool\n");
+    if (rte_eth_dev_count_avail() == 0)
+        rte_exit(EXIT_FAILURE, "No Ethernet ports - bye\n");
 
-    // 4. 查找自己的Ring队列
-    char ring_name[32];
-    snprintf(ring_name, sizeof(ring_name), "MProc_Client_RX_%d", client_id);
-
-    rx_ring = rte_ring_lookup(ring_name);
+    // 3. 查找Server创建的Ring队列
+    rx_ring = rte_ring_lookup(get_rx_queue_name(client_id));
     if (rx_ring == NULL)
-        rte_exit(EXIT_FAILURE, "Cannot find ring: %s\n", ring_name);
+        rte_exit(EXIT_FAILURE, "Cannot get RX ring - is server process running?\n");
 
-    // 5. 主循环：接收和处理数据包
-    while (!force_quit) {
-        // 从Ring接收包
-        nb_rx = rte_ring_dequeue_burst(rx_ring, (void **)bufs,
-                                       BURST_SIZE, NULL);
+    // 4. 查找Server创建的内存池
+    mp = rte_mempool_lookup(PKTMBUF_POOL_NAME);
+    if (mp == NULL)
+        rte_exit(EXIT_FAILURE, "Cannot get mempool for mbufs\n");
 
-        // 处理包（简单的L2转发）
-        for (i = 0; i < nb_rx; i++) {
-            // 转发到对应端口
-            // Port 0 → Port 1, Port 2 → Port 3, ...
-            uint16_t dst_port = (bufs[i]->port) ^ 1;
+    // 5. 查找共享的端口信息结构
+    mz = rte_memzone_lookup(MZ_PORT_INFO);
+    if (mz == NULL)
+        rte_exit(EXIT_FAILURE, "Cannot get port info structure\n");
+    ports = mz->addr;
+    tx_stats = &(ports->tx_stats[client_id]);  // 本Client的统计结构
 
-            rte_eth_tx_burst(dst_port, 0, &bufs[i], 1);
+    // 6. 配置输出端口和TX buffer
+    configure_output_ports(ports);
+
+    RTE_LOG(INFO, APP, "Finished Process Init.\n");
+    printf("\nClient process %d handling packets\n", client_id);
+
+    // 7. 主循环：接收和转发数据包
+    for (;;) {
+        uint16_t i, rx_pkts;
+
+        // 从Ring批量出队
+        rx_pkts = rte_ring_dequeue_burst(rx_ring, pkts,
+                PKT_READ_SIZE, NULL);
+
+        // 没有收到包且需要flush TX buffer
+        if (rx_pkts == 0 && need_flush) {
+            for (i = 0; i < ports->num_ports; i++) {
+                uint16_t port = ports->id[i];
+                sent = rte_eth_tx_buffer_flush(port, client_id,
+                                               tx_buffer[port]);
+                tx_stats->tx[port] += sent;
+            }
+            need_flush = 0;
+            continue;
         }
+
+        // 处理接收到的包
+        for (i = 0; i < rx_pkts; i++)
+            handle_packet(pkts[i]);
+
+        need_flush = 1;
     }
 
-    return 0;
+    rte_eal_cleanup();
 }
 ```
 
-### 4.3 共享数据结构定义
+**查找对象顺序:** Ring → Mempool → Memzone(port_info)
+
+#### 4.2.2 配置输出端口 ([mp_client/client.c:160-177](mp_client/client.c#L160-L177))
 
 ```c
-// shared/common.h
+static void configure_output_ports(const struct port_info *ports)
+{
+    int i;
 
-#define MAX_CLIENTS 16
-#define RING_SIZE 4096
-#define MBUF_POOL_NAME "mbuf_pool"
-#define CLIENT_RING_NAME "MProc_Client_RX_%u"
+    if (ports->num_ports > RTE_MAX_ETHPORTS)
+        rte_exit(EXIT_FAILURE, "Too many ethernet ports.\n");
 
-// Client信息结构
-struct client_info {
-    uint16_t client_id;
-    struct rte_ring *rx_ring;     // 接收队列
-    volatile uint64_t rx_pkts;    // 统计：接收包数
-    volatile uint64_t tx_pkts;    // 统计：发送包数
-} __rte_cache_aligned;
+    // 配置端口对: Port 0↔1, Port 2↔3, ...
+    for (i = 0; i < ports->num_ports - 1; i += 2) {
+        uint16_t p1 = ports->id[i];
+        uint16_t p2 = ports->id[i+1];
 
-// 全局共享信息（存储在共享内存中）
-struct shared_info {
-    uint32_t num_clients;
-    struct client_info clients[MAX_CLIENTS];
-} __rte_cache_aligned;
+        output_ports[p1] = p2;  // Port 0 → Port 1
+        output_ports[p2] = p1;  // Port 1 → Port 0
+
+        // 为每个端口配置TX buffer
+        configure_tx_buffer(p1, MBQ_CAPACITY);
+        configure_tx_buffer(p2, MBQ_CAPACITY);
+    }
+}
 ```
+
+**端口映射:** 实现简单的L2转发,Port 0和Port 1互为出口
+
+#### 4.2.3 配置TX Buffer ([mp_client/client.c:133-153](mp_client/client.c#L133-L153))
+
+```c
+static void configure_tx_buffer(uint16_t port_id, uint16_t size)
+{
+    int ret;
+
+    // 分配TX buffer(32个包的缓冲)
+    tx_buffer[port_id] = rte_zmalloc_socket("tx_buffer",
+            RTE_ETH_TX_BUFFER_SIZE(size), 0,
+            rte_eth_dev_socket_id(port_id));
+
+    if (tx_buffer[port_id] == NULL)
+        rte_exit(EXIT_FAILURE, "Cannot allocate buffer for tx on port %u\n",
+                 port_id);
+
+    // 初始化TX buffer
+    rte_eth_tx_buffer_init(tx_buffer[port_id], size);
+
+    // 设置错误回调(处理发送失败的包)
+    ret = rte_eth_tx_buffer_set_err_callback(tx_buffer[port_id],
+            flush_tx_error_callback, (void *)(intptr_t)port_id);
+
+    if (ret < 0)
+        rte_exit(EXIT_FAILURE,
+        "Cannot set error callback for tx buffer on port %u\n", port_id);
+}
+```
+
+**TX Buffer作用:**
+- 批量发送优化
+- 自动flush机制
+- 错误处理回调
+
+#### 4.2.4 数据包处理 ([mp_client/client.c:184-196](mp_client/client.c#L184-L196))
+
+```c
+static void handle_packet(struct rte_mbuf *buf)
+{
+    int sent;
+    const uint16_t in_port = buf->port;  // 原始入口端口
+    const uint16_t out_port = output_ports[in_port];  // 查找出口端口
+    struct rte_eth_dev_tx_buffer *buffer = tx_buffer[out_port];
+
+    // 使用TX buffer发送(自动批量)
+    sent = rte_eth_tx_buffer(out_port, client_id, buffer, buf);
+
+    // 更新统计(sent可能是0,表示还在buffer中)
+    if (sent)
+        tx_stats->tx[out_port] += sent;
+}
+```
+
+**关键点:**
+- 使用`rte_eth_tx_buffer()`而非`rte_eth_tx_burst()`
+- 每个Client使用独立的TX队列(client_id作为queue_id)
+
+#### 4.2.5 TX错误处理 ([mp_client/client.c:118-130](mp_client/client.c#L118-L130))
+
+```c
+static void flush_tx_error_callback(struct rte_mbuf **unsent,
+                                   uint16_t count,
+                                   void *userdata)
+{
+    int i;
+    uint16_t port_id = (uintptr_t)userdata;
+
+    // 统计丢弃的包
+    tx_stats->tx_drop[port_id] += count;
+
+    // 释放未能发送的mbuf
+    for (i = 0; i < count; i++)
+        rte_pktmbuf_free(unsent[i]);
+}
+```
+
+### 4.3 共享数据结构定义 ([shared/common.h:1-58](shared/common.h#L1-L58))
+
+```c
+#define MAX_CLIENTS 16
+
+// RX统计结构(Server写,按端口对齐到缓存行)
+struct __rte_cache_aligned rx_stats {
+    uint64_t rx[RTE_MAX_ETHPORTS];
+};
+
+// TX统计结构(每个Client一个,避免缓存行竞争)
+struct __rte_cache_aligned tx_stats {
+    uint64_t tx[RTE_MAX_ETHPORTS];
+    uint64_t tx_drop[RTE_MAX_ETHPORTS];
+};
+
+// 端口信息结构(存储在memzone共享内存中)
+struct port_info {
+    uint16_t num_ports;                    // 端口数量
+    uint16_t id[RTE_MAX_ETHPORTS];         // 端口ID数组
+    volatile struct rx_stats rx_stats;     // Server的RX统计
+    volatile struct tx_stats tx_stats[MAX_CLIENTS];  // 每个Client的TX统计
+};
+
+// 共享对象命名规范
+#define MP_CLIENT_RXQ_NAME "MProc_Client_%u_RX"
+#define PKTMBUF_POOL_NAME "MProc_pktmbuf_pool"
+#define MZ_PORT_INFO "MProc_port_info"
+
+// 获取Client的Ring队列名称
+static inline const char *get_rx_queue_name(uint8_t id)
+{
+    static char buffer[sizeof(MP_CLIENT_RXQ_NAME) + 2];
+    snprintf(buffer, sizeof(buffer), MP_CLIENT_RXQ_NAME, id);
+    return buffer;
+}
+```
+
+**数据结构设计原则:**
+
+1. **缓存行对齐(`__rte_cache_aligned`):**
+   - 避免False Sharing
+   - 每个Client的统计独占缓存行
+
+2. **Volatile修饰:**
+   - `volatile struct tx_stats`: 多进程访问,防止编译器优化
+
+3. **Memzone存储:**
+   - `port_info`存储在共享memzone中
+   - 通过`rte_memzone_reserve()`和`rte_memzone_lookup()`共享
+
+4. **命名约定:**
+   - 所有共享对象以`MProc_`前缀
+   - Ring名称包含Client ID: `MProc_Client_0_RX`
+
+### 4.4 流程图总结
+
+**完整数据流:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                       NIC Port 0 RX                             │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                   ┌─────────▼─────────┐
+                   │   Server Process  │
+                   │    (Primary)      │
+                   │                   │
+                   │ 1. rx_burst()     │
+                   │ 2. Round-Robin    │
+                   │ 3. enqueue_bulk() │
+                   └─────┬───────┬─────┘
+                         │       │
+        ┌────────────────┘       └────────────────┐
+        │                                         │
+  ┌─────▼─────┐                           ┌─────▼─────┐
+  │ Ring 0    │                           │ Ring 1    │
+  │ (128 pkts)│                           │ (128 pkts)│
+  └─────┬─────┘                           └─────┬─────┘
+        │                                       │
+  ┌─────▼─────┐                          ┌─────▼─────┐
+  │ Client 0  │                          │ Client 1  │
+  │(Secondary)│                          │(Secondary)│
+  │           │                          │           │
+  │1.dequeue()│                          │1.dequeue()│
+  │2.handle() │                          │2.handle() │
+  │3.tx_buf() │                          │3.tx_buf() │
+  └─────┬─────┘                          └─────┬─────┘
+        │                                      │
+        │  TX Queue 0                          │  TX Queue 1
+        └──────────┬───────────────────────────┘
+                   │
+        ┌──────────▼──────────┐
+        │  NIC Port 1 TX      │
+        └─────────────────────┘
+```
+
+**关键性能指标(基于官方示例):**
+- Ring大小: 128 (CLIENT_QUEUE_RINGSIZE)
+- Burst大小: 32 (PACKET_READ_SIZE)
+- RX描述符: 1024 (RTE_MP_RX_DESC_DEFAULT)
+- TX描述符: 1024 (RTE_MP_TX_DESC_DEFAULT)
+- Mbuf Cache: 512 (MBUF_CACHE_SIZE)
 
 ---
 
@@ -884,16 +1366,16 @@ echo 1024 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
 dpdk-devbind.py --bind=vfio-pci 0000:03:00.0 0000:03:00.1
 
 # 3. 启动Server
-./dpdk-mp_server -l 1-2 -n 4 -- -p 0x3 -n 2 &
+./mp_server/build/mp_server -l 1-2 -n 4 -- -p 0x3 -n 2 &
 SERVER_PID=$!
 
 sleep 2  # 等待Server初始化
 
 # 4. 启动Client
-./dpdk-mp_client -l 3 --proc-type=auto -- -n 0 &
+./mp_client/build/mp_client -l 3 --proc-type=auto -- -n 0 &
 CLIENT0_PID=$!
 
-./dpdk-mp_client -l 4 --proc-type=auto -- -n 1 &
+./mp_client/build/mp_client -l 4 --proc-type=auto -- -n 1 &
 CLIENT1_PID=$!
 
 # 5. 等待用户中断
@@ -908,16 +1390,16 @@ kill $SERVER_PID $CLIENT0_PID $CLIENT1_PID
 
 ```bash
 # 使用gdb调试Secondary进程
-sudo gdb --args ./dpdk-mp_client -l 3 --proc-type=secondary -- -n 0
+sudo gdb --args ./mp_client/build/mp_client -l 3 --proc-type=secondary -- -n 0
 
 # 查看进程内存映射
 cat /proc/<PID>/maps | grep huge
 
 # 使用strace跟踪系统调用
-sudo strace -f ./dpdk-mp_server ...
+sudo strace -f ./mp_server/build/mp_server -l 1-2 -n 4 -- -p 0x3 -n 2
 
 # 使用perf分析性能
-sudo perf record -g ./dpdk-mp_client ...
+sudo perf record -g ./mp_client/build/mp_client -l 3 --proc-type=auto -- -n 0
 sudo perf report
 ```
 
