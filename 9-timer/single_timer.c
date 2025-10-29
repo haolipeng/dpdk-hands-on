@@ -31,7 +31,7 @@ timer1_cb(__rte_unused struct rte_timer *tim,
 	hz = rte_get_timer_hz();
 	lcore_id = rte_get_next_lcore(lcore_id, 0, 1);
 	printf("[SINGLE] Manually reloading timer on next lcore %u\n", lcore_id);
-	rte_timer_reset(tim, hz/3, SINGLE, lcore_id, timer1_cb, NULL);
+	rte_timer_reset(tim, hz * 3, SINGLE, lcore_id, timer1_cb, NULL);
 }
 
 static __rte_noreturn int
@@ -75,15 +75,15 @@ main(int argc, char **argv)
 	/* 初始化定时器结构 */
 	rte_timer_init(&timer1);
 
-	/* 加载timer1，每1/3秒触发一次，在下一个lcore上运行，手动重新加载 */
+	/* 加载timer1，每3秒触发一次，在下一个lcore上运行，手动重新加载 */
 	hz = rte_get_timer_hz();
 	timer_resolution_cycles = hz * 10 / 1000; /* 约10ms */
 
 	lcore_id = rte_lcore_id();
 	lcore_id = rte_get_next_lcore(lcore_id, 0, 1);
-	printf("Setting up SINGLE timer on lcore %u, interval=1/3 second\n", lcore_id);
+	printf("Setting up SINGLE timer on lcore %u, interval=3 seconds\n", lcore_id);
 	printf("Timer will be manually reloaded on different cores each time\n");
-	rte_timer_reset(&timer1, hz/3, SINGLE, lcore_id, timer1_cb, NULL);
+	rte_timer_reset(&timer1, hz * 3, SINGLE, lcore_id, timer1_cb, NULL);
 
 	/* 在每个工作lcore上调用lcore_mainloop() */
 	RTE_LCORE_FOREACH_WORKER(lcore_id) {
