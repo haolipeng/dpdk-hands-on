@@ -113,8 +113,6 @@ unsigned received = rte_ring_sc_dequeue_burst(ring,
 ### 完整示例：SP/SC生产者-消费者
 
 ```c
-/* SPDX-License-Identifier: BSD-3-Clause */
-
 #include <stdio.h>
 #include <stdint.h>
 #include <signal.h>
