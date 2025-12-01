@@ -2,7 +2,7 @@
 # Copyright(c) 2024
 
 cmake_minimum_required(VERSION 3.10)
-project(dpdk_timer C)
+project(dpdk_hts_ring C)
 
 # 设置C标准
 set(CMAKE_C_STANDARD 11)
@@ -21,16 +21,12 @@ include_directories(${DPDK_INCLUDE_DIRS})
 # 添加链接目录
 link_directories(${DPDK_LIBRARY_DIRS})
 
-# 定义周期性定时器可执行文件
-add_executable(periodic_timer periodic_timer.c)
-target_link_libraries(periodic_timer ${DPDK_LIBRARIES})
-
-# 定义单次定时器可执行文件
-add_executable(single_timer single_timer.c)
-target_link_libraries(single_timer ${DPDK_LIBRARIES})
+# 定义 HTS Ring 示例可执行文件
+add_executable(hts_ring hts_ring.c)
+target_link_libraries(hts_ring ${DPDK_LIBRARIES})
 
 # 设置输出目录到统一的 bin 目录
-set_target_properties(periodic_timer single_timer PROPERTIES
+set_target_properties(hts_ring PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
 )
 

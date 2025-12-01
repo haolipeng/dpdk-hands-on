@@ -29,19 +29,24 @@ target_link_libraries(mp_server ${DPDK_LIBRARIES})
 add_executable(mp_client client.c common.h)
 target_link_libraries(mp_client ${DPDK_LIBRARIES})
 
+# 设置输出目录到统一的 bin 目录
+set_target_properties(mp_server mp_client PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
+)
+
 # 添加自定义目标：运行Server
 add_custom_target(run-server
-    COMMAND sudo ${CMAKE_CURRENT_BINARY_DIR}/mp_server -l 0-1 -n 4 --proc-type=primary --file-prefix=mp_ipc
+    COMMAND sudo ${CMAKE_SOURCE_DIR}/bin/mp_server -l 0-1 -n 4 --proc-type=primary --file-prefix=mp_ipc
     DEPENDS mp_server
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
     COMMENT "Starting DPDK Multi-Process IPC Server..."
 )
 
 # 添加自定义目标：运行Client
 add_custom_target(run-client
-    COMMAND sudo ${CMAKE_CURRENT_BINARY_DIR}/mp_client -l 2-3 -n 4 --proc-type=secondary --file-prefix=mp_ipc
+    COMMAND sudo ${CMAKE_SOURCE_DIR}/bin/mp_client -l 2-3 -n 4 --proc-type=secondary --file-prefix=mp_ipc
     DEPENDS mp_client
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/bin
     COMMENT "Starting DPDK Multi-Process IPC Client..."
 )
 
@@ -50,18 +55,4 @@ message(STATUS "DPDK version: ${DPDK_VERSION}")
 message(STATUS "DPDK include dirs: ${DPDK_INCLUDE_DIRS}")
 message(STATUS "DPDK library dirs: ${DPDK_LIBRARY_DIRS}")
 message(STATUS "DPDK libraries: ${DPDK_LIBRARIES}")
-
-# 帮助信息
-add_custom_target(help-cmake
-    COMMAND ${CMAKE_COMMAND} -E echo "Available CMake targets:"
-    COMMAND ${CMAKE_COMMAND} -E echo "  make               - Build both server and client"
-    COMMAND ${CMAKE_COMMAND} -E echo "  make mp_server     - Build server only"
-    COMMAND ${CMAKE_COMMAND} -E echo "  make mp_client     - Build client only"
-    COMMAND ${CMAKE_COMMAND} -E echo "  make run-server    - Run the server process"
-    COMMAND ${CMAKE_COMMAND} -E echo "  make run-client    - Run the client process"
-    COMMAND ${CMAKE_COMMAND} -E echo "  make clean         - Remove built binaries"
-    COMMAND ${CMAKE_COMMAND} -E echo ""
-    COMMAND ${CMAKE_COMMAND} -E echo "Manual usage:"
-    COMMAND ${CMAKE_COMMAND} -E echo "  Terminal 1: make run-server"
-    COMMAND ${CMAKE_COMMAND} -E echo "  Terminal 2: make run-client"
-)
+message(STATUS "Output directory: ${CMAKE_SOURCE_DIR}/bin")
