@@ -1,44 +1,33 @@
 /**
- * build_udp_packet.c - 构造 UDP 数据包演示
+ * build_udp_packet.c - 构造 UDP 数据包并保存为 pcap 文件
  *
  * 本程序演示如何从零构建一个完整的 UDP 数据包：
  * 1. 添加 Payload (应用层数据)
  * 2. 添加 UDP 头 (传输层)
  * 3. 添加 IPv4 头 (网络层)
  * 4. 添加以太网头 (链路层)
+ * 5. 使用 libpcap 将数据包保存到 pcap 文件
  *
  * 封装顺序：从内到外，使用 prepend 添加各层协议头
  *
  * 编译: make build_udp_packet
  * 运行: sudo ./bin/build_udp_packet -l 0 --no-pci
+ * 查看: tcpdump -r udp_packet.pcap -XX
+ *       wireshark udp_packet.pcap
  */
 
 #include <stdio.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <pcap/pcap.h>
 #include <rte_eal.h>
 #include <rte_mbuf.h>
 #include <rte_ether.h>
 #include <rte_ip.h>
 #include <rte_udp.h>
 
-/* 打印数据包十六进制内容 */
-static void print_hex_dump(struct rte_mbuf *mbuf, uint16_t max_len)
-{
-    uint8_t *data = rte_pktmbuf_mtod(mbuf, uint8_t *);
-    uint16_t len = (mbuf->data_len < max_len) ? mbuf->data_len : max_len;
-
-    printf("Hex dump (first %u bytes):\n", len);
-    for (int i = 0; i < len; i++) {
-        if (i % 16 == 0)
-            printf("  %04x: ", i);
-        printf("%02x ", data[i]);
-        if ((i + 1) % 16 == 0)
-            printf("\n");
-    }
-    if (len % 16 != 0)
-        printf("\n");
-}
+/* pcap 文件输出路径 */
+#define PCAP_OUTPUT_FILE "udp_packet.pcap"
 
 /* 打印 MAC 地址 */
 static void print_mac(const char *label, uint8_t *mac)
@@ -53,6 +42,54 @@ static void print_ipv4(const char *label, uint32_t ip)
     uint8_t *bytes = (uint8_t *)&ip;
     printf("  %s: %u.%u.%u.%u\n", label,
            bytes[0], bytes[1], bytes[2], bytes[3]);
+}
+
+/**
+ * 将 mbuf 数据写入 pcap 文件
+ *
+ * @param mbuf   要保存的数据包
+ * @param filename  输出文件名
+ * @return 0 成功，-1 失败
+ */
+static int save_packet_to_pcap(struct rte_mbuf *mbuf, const char *filename)
+{
+    pcap_t *pcap_handle;
+    pcap_dumper_t *pcap_dumper;
+    struct pcap_pkthdr pcap_hdr;
+
+    /*
+     * 创建一个 "dead" pcap 句柄，用于写入文件
+     * DLT_EN10MB 表示以太网链路层类型
+     * 65535 是快照长度（最大捕获长度）
+     */
+    pcap_handle = pcap_open_dead(DLT_EN10MB, 65535);
+    if (pcap_handle == NULL) {
+        printf("ERROR: pcap_open_dead failed\n");
+        return -1;
+    }
+
+    /* 打开 pcap 文件进行写入 */
+    pcap_dumper = pcap_dump_open(pcap_handle, filename);
+    if (pcap_dumper == NULL) {
+        printf("ERROR: pcap_dump_open failed: %s\n", pcap_geterr(pcap_handle));
+        pcap_close(pcap_handle);
+        return -1;
+    }
+
+    /* 填充 pcap 包头 */
+    gettimeofday(&pcap_hdr.ts, NULL);    /* 当前时间戳 */
+    pcap_hdr.caplen = mbuf->data_len;    /* 实际捕获的长度 */
+    pcap_hdr.len = mbuf->data_len;       /* 数据包原始长度 */
+
+    /* 获取 mbuf 数据指针并写入 pcap 文件 */
+    uint8_t *pkt_data = rte_pktmbuf_mtod(mbuf, uint8_t *);
+    pcap_dump((u_char *)pcap_dumper, &pcap_hdr, pkt_data);
+
+    /* 关闭文件和句柄 */
+    pcap_dump_close(pcap_dumper);
+    pcap_close(pcap_handle);
+
+    return 0;
 }
 
 int main(int argc, char *argv[])
@@ -70,7 +107,7 @@ int main(int argc, char *argv[])
 
     printf("\n");
     printf("========================================\n");
-    printf("     Build UDP Packet Demo\n");
+    printf("   Build UDP Packet & Save to PCAP\n");
     printf("========================================\n\n");
 
     /* 创建内存池 */
@@ -91,7 +128,7 @@ int main(int argc, char *argv[])
     }
 
     /* 准备参数 */
-    const char *payload_data = "Hello UDP!";
+    const char *payload_data = "Hello UDP! This is a DPDK mbuf demo packet.";
     size_t payload_len = strlen(payload_data) + 1;
 
     uint8_t src_mac[6] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55};
@@ -100,16 +137,6 @@ int main(int argc, char *argv[])
     uint32_t dst_ip = 0xC0A80102;  /* 192.168.1.2 */
     uint16_t src_port = 12345;
     uint16_t dst_port = 80;
-
-    printf("Packet Parameters:\n");
-    printf("-----------------------------------------\n");
-    print_mac("Src MAC", src_mac);
-    print_mac("Dst MAC", dst_mac);
-    print_ipv4("Src IP", htonl(src_ip));
-    print_ipv4("Dst IP", htonl(dst_ip));
-    printf("  Src Port: %u\n", src_port);
-    printf("  Dst Port: %u\n", dst_port);
-    printf("  Payload: \"%s\" (%zu bytes)\n\n", payload_data, payload_len);
 
     /*
      * 封装过程：从内到外
@@ -170,8 +197,6 @@ int main(int argc, char *argv[])
 
     printf("  IP header: %zu bytes\n", sizeof(*ip));
     printf("  IP total length: %u\n", ntohs(ip->total_length));
-    printf("  Protocol: UDP (17)\n");
-    printf("  TTL: 64\n");
     printf("  data_len now: %u\n\n", mbuf->data_len);
 
     /* ===== Step 4: 添加以太网头 ===== */
@@ -191,29 +216,30 @@ int main(int argc, char *argv[])
     printf("  EtherType: 0x%04x (IPv4)\n", RTE_ETHER_TYPE_IPV4);
     printf("  data_len now: %u\n\n", mbuf->data_len);
 
-    /* ===== 显示最终结果 ===== */
-    printf("========================================\n");
-    printf("        Final Packet Structure\n");
-    printf("========================================\n");
+    /* ===== Step 5: 保存到 pcap 文件 ===== */
     printf("\n");
-    printf("  +----------------------------------+\n");
-    printf("  | Ethernet Header |  14 bytes      |\n");
-    printf("  +----------------------------------+\n");
-    printf("  | IPv4 Header     |  20 bytes      |\n");
-    printf("  +----------------------------------+\n");
-    printf("  | UDP Header      |   8 bytes      |\n");
-    printf("  +----------------------------------+\n");
-    printf("  | Payload         |  %2zu bytes      |\n", payload_len);
-    printf("  +----------------------------------+\n");
-    printf("  | Total           |  %2u bytes      |\n", mbuf->data_len);
-    printf("  +----------------------------------+\n");
+    printf("========================================\n");
+    printf("        Save to PCAP File\n");
+    printf("========================================\n");
     printf("\n");
 
-    /* 打印十六进制内容 */
-    print_hex_dump(mbuf, 64);
+    printf("Packet Parameters:\n");
+    printf("-----------------------------------------\n");
+    print_mac("Src MAC", src_mac);
+    print_mac("Dst MAC", dst_mac);
+    print_ipv4("Src IP", htonl(src_ip));
+    print_ipv4("Dst IP", htonl(dst_ip));
+    printf("  Src Port: %u\n", src_port);
+    printf("  Dst Port: %u\n", dst_port);
+    printf("  Payload: \"%s\" (%zu bytes)\n\n", payload_data, payload_len);
+    ret = save_packet_to_pcap(mbuf, PCAP_OUTPUT_FILE);
+    if (ret == 0) {
+        printf("  [OK] Packet saved to: %s\n\n", PCAP_OUTPUT_FILE);
+    } else {
+        printf("  [FAILED] Could not save packet to pcap file\n");
+    }
 
     printf("\n");
-    printf("Packet construction completed!\n\n");
 
 cleanup:
     rte_pktmbuf_free(mbuf);
