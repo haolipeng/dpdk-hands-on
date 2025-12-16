@@ -64,6 +64,9 @@ The project follows a lesson-based structure where each numbered directory is a 
 9-timer/                - Lesson 9: DPDK timer subsystem
 10-sp-sc-ring/          - Lesson 10: Single producer/consumer ring (SP/SC)
 11-mp-mc-ring/          - Lesson 11: Multi producer/consumer ring (MP/MC)
+12-hts-ring/            - Lesson 12: HTS (Head-Tail Sync) ring
+13-mbuf_usage/          - Lesson 13: Mbuf usage and operations
+14-acl/                 - Lesson 14: ACL (Access Control List) - high-performance packet classification
 ```
 
 Each lesson directory contains:
@@ -75,7 +78,12 @@ Each lesson directory contains:
 
 Every lesson has an accompanying markdown file:
 - `lessonN-<topic>.md` - Tutorial explaining concepts and code
-- Additional guides: `DPDK-Ring-Practical-Guide.md`, `DPDK-Mbuf-Practical-Guide.md`, etc.
+- Additional guides: `DPDK-Ring-Practical-Guide.md`, `DPDK-Mbuf-Practical-Guide.md`, `DPDK-NUMA-Guide.md`, etc.
+
+**Note on Lesson 14 (ACL)**: This lesson has been split into 3 parts for better learning experience:
+- `lesson14-1-acl-basics.md` - ACL fundamentals and core concepts
+- `lesson14-2-acl-practice.md` - Complete API usage and practical examples
+- `lesson14-3-acl-advanced.md` - Performance optimization and advanced topics
 
 ## Key DPDK Concepts Used
 
@@ -321,6 +329,11 @@ Follow lessons in order:
 2. Lessons 3-6: Packet processing fundamentals
 3. Lessons 7-8: Multi-process architectures
 4. Lesson 9: Timers and event scheduling
-5. Lessons 10-11: Advanced ring queue modes
+5. Lessons 10-12: Advanced ring queue modes (SP/SC, MP/MC, HTS)
+6. Lesson 13: Mbuf operations and packet buffer management
+7. Lesson 14 (ACL trilogy): High-performance packet classification
+   - 14-1: ACL basics (concepts and data structures)
+   - 14-2: ACL practice (API usage and complete examples)
+   - 14-3: ACL advanced (performance tuning and troubleshooting)
 
 Each lesson builds on previous concepts.
