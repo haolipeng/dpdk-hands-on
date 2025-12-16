@@ -58,6 +58,7 @@ add_subdirectory(10-sp-sc-ring)
 add_subdirectory(11-mp-mc-ring)
 add_subdirectory(12-hts-ring)
 add_subdirectory(13-mbuf_usage)
+add_subdirectory(14-acl)
 
 # 打印配置信息
 message(STATUS "DPDK version: ${DPDK_VERSION}")
