@@ -835,6 +835,7 @@ sudo ./ring_mpmc -l 0-4  # 需要5个lcores
 **Head-Tail Sync (HTS)**：头尾同步模式，完全序列化的多生产者/多消费者模式。
 
 **核心特点**：
+
 - 仅当`head.value == tail.value`时线程才能修改head
 - 使用单个64位CAS原子更新头尾
 - 避免了MP/MC模式中的tail等待问题
@@ -1044,6 +1045,7 @@ sudo ./ring_hts -l 0-1
 **Relaxed Tail Sync (RTS)**：松弛尾部同步，介于MP/MC和HTS之间的折衷方案。
 
 **核心机制**：
+
 - 尾值不是由每个完成入队的线程增加
 - 而仅由最后一个线程增加
 - 避免了Lock-Waiter-Preemption问题
@@ -1116,6 +1118,7 @@ struct rte_ring *ring = rte_ring_create("rts_ring",
 ### Zero-Copy API详解
 
 **传统方式的问题**：
+
 ```c
 /* 需要两次内存拷贝 */
 memcpy(local_buf, data_source, size);         // 第1次拷贝
