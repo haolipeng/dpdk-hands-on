@@ -33,3 +33,9 @@ Thumbs.db
 *.tmp
 *.temp
 *.log
+
+# VitePress / Node.js
+docs/node_modules/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+node_modules/
