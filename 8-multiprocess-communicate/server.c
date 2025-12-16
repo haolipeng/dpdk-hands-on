@@ -49,7 +49,7 @@ handle_hello_request(const struct rte_mp_msg *msg, const void *peer)
     struct shared_info *info;
     struct rte_mp_msg reply;
     char request_msg[MAX_MSG_LEN];
-    char reply_msg[MAX_MSG_LEN];
+    char reply_msg[MAX_MSG_LEN * 2];
 
     /* 解析请求消息 */
     if (msg->len_param > 0 && msg->len_param < MAX_MSG_LEN) {
@@ -92,7 +92,7 @@ handle_hello_async_request(const struct rte_mp_msg *msg, const void *peer)
     struct shared_info *info;
     struct rte_mp_msg reply;
     char request_msg[MAX_MSG_LEN];
-    char reply_msg[MAX_MSG_LEN];
+    char reply_msg[MAX_MSG_LEN * 2];
 
     /* 解析请求消息 */
     if (msg->len_param > 0 && msg->len_param < MAX_MSG_LEN) {

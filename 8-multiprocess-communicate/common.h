@@ -28,7 +28,7 @@
 /* 注意: 回复消息的name必须与请求消息的name相同，因此不需要单独定义REPLY名称 */
 
 /* 消息数据最大长度 */
-#define MAX_MSG_LEN         128
+#define MAX_MSG_LEN         512
 
 /* 共享信息结构 */
 struct shared_info {

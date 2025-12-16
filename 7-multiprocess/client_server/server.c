@@ -23,6 +23,7 @@
 #include <rte_ring.h>
 #include <rte_cycles.h>
 #include <rte_ether.h>
+#include <rte_errno.h>
 
 #include "common.h"
 

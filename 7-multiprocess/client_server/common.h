@@ -16,7 +16,6 @@
 #define MAX_CLIENTS 4                 // 最多支持的client数量
 #define NUM_MBUFS 8191               // mbuf数量(2^n - 1)
 #define MBUF_CACHE_SIZE 250          // mbuf缓存
-#define RTE_MBUF_DEFAULT_BUF_SIZE 2048  // mbuf大小
 #define RING_SIZE 2048               // Ring大小
 
 /* 数据包批处理大小 */
@@ -29,7 +28,7 @@ struct packet {
     uint32_t seq_num;
     uint64_t timestamp;
     char payload[64];
-} __attribute__((packed));
+};
 
 /* Client统计信息(存储在共享内存) */
 struct client_stats {
