@@ -25,7 +25,7 @@ export default defineConfig({
     nav: [
       { text: '首页', link: '/' },
       { text: '教程', link: '/lessons/lesson1-helloworld' },
-      { text: '���题指南', link: '/guides/ring-practical' },
+      { text: '专题实战指南', link: '/guides/ring-practical' },
       {
         text: '参考资源',
         items: [
@@ -114,7 +114,7 @@ export default defineConfig({
       ],
       '/guides/': [
         {
-          text: '专题指南',
+          text: '专题实战指南',
           items: [
             { text: 'Ring 实战指南', link: '/guides/ring-practical' },
             { text: 'Ring HTS 模式', link: '/guides/ring-hts' },
