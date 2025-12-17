@@ -2,25 +2,25 @@
 
 ## 课程简介
 
-ACL（Access Control List，访问控制列表）是 DPDK 中用于高性能数据包分类和过滤的核心组件。本课程介绍 ACL 的基础概念、数据结构和工作原理。
+ACL（Access Control List，访问控制列表）是 DPDK 中用于高性能数据包分类和过滤的核心组件。
+
+本课程介绍 ACL 的基础概念、数据结构和工作原理。
 
 **学习目标：**
+
 - 理解 ACL 的应用场景和优势
 - 掌握 IPv4 5 元组匹配的原理
 - 熟悉 ACL 的数据结构设计
-- 了解优先级和通配符的使用
-- 为实战编程打好理论基础
 
-**前置知识：**
-- 完成 Lesson 1-5（EAL 初始化、基本数据结构）
-- 理解 TCP/IP 协议栈基础（IP 地址、端口、协议号）
-- 了解网络数据包的基本结构
 
-**应用场景：**
-- 防火墙规则（允许/拒绝特定流量）
-- QoS 分类（根据流量特征分配优先级）
-- DDoS 防护（识别和过滤恶意流量）
-- 流量统计（按规则分类统计流量）
+
+在学习之前，我们有什么疑问呢？
+
+ACL使用的一般流程是什么呢？
+
+结构体定义包括哪些枚举值可选呢？每个枚举值分别代表什么含义呢？
+
+通过将官网代码进行剖析，
 
 ---
 
@@ -45,12 +45,9 @@ for (int i = 0; i < num_rules; i++) {
 
 **主要问题：**
 
-| 问题 | 说明 | 影响 |
-|------|------|------|
-| **O(n) 查找时间** | 规则越多，查找越慢 | 无法扩展到大量规则 |
-| **无法优化** | 每个数据包都要遍历��有规则 | CPU 占用高 |
-| **维护困难** | 手写 if-else 链难以维护 | 代码复杂，易出错 |
-| **不支持范围/通配符** | 需要为每个具体值写规则 | 规则数量爆炸 |
+- 查找速度慢，规则越多就越慢
+- 规则维护困难，手写if-else规则难以维护
+- 不支持范围查询和通配符查询
 
 ### 1.2 ACL 的优势
 
@@ -80,15 +77,6 @@ DPDK ACL 使用优化的 **trie（字典树）结构**，提供高性能的多�
 4. ✅ **通配符和范围** - 支持 IP 子网掩码（CIDR）和端口范围
 5. ✅ **批量分类** - 一次分类多个数据包，提高吞吐量
 
-### 1.3 典型应用场景对比
-
-| 场景 | 传统方式 | DPDK ACL | 性能提升 |
-|------|---------|----------|---------|
-| **简单防火墙** | if-else 链 | 5 元组规则 | 10-100x |
-| **QoS 分类** | 线性查找 | 多 category | 50-200x |
-| **DDoS 防护** | Hash 表 + 遍历 | 优先级规则 | 20-100x |
-| **流量统计** | 多次 Hash 查找 | 批量分类 | 10-50x |
-
 ---
 
 ## 二、核心概念
@@ -106,22 +94,12 @@ DPDK ACL 使用优化的 **trie（字典树）结构**，提供高性能的多�
 └──────────────── 五元组（5-Tuple） ────────────────────┘
 
 示例：
-192.168.1.10 → 10.0.0.1, Port 12345 → 80, Protocol TCP(6)
+192.168.1.10 → 10.0.0.1, Port 12345 → 80, Protocol TCP(6) 对应上述五元组的各个项。
 ```
-
-**字段说明：**
-
-| 字段 | 大小 | 说明 | 示例 |
-|------|------|------|------|
-| **源 IP** | 4 字节 | 数据包的源 IP 地址 | 192.168.1.10 |
-| **目的 IP** | 4 字节 | 数据包的目的 IP 地址 | 10.0.0.1 |
-| **源端口** | 2 字节 | TCP/UDP 源端口 | 12345 |
-| **目的端口** | 2 字节 | TCP/UDP 目的端口 | 80 (HTTP) |
-| **协议** | 1 字节 | IP 协议号（TCP=6, UDP=17） | 6 (TCP) |
 
 ### 2.2 ACL 规则结构
 
-一条 ACL 规则由 **匹配字段** 和 **动作** 组成：
+一条 ACL 规则由 **匹配字段**、**优先级和 动作** 组成：
 
 ```
 规则示例：允许来自 192.168.1.0/24 的 HTTP 流量
@@ -178,93 +156,37 @@ ACL 支持三种字段匹配类型：
 
 #### 2.4.1 MASK（掩码匹配）
 
-用于 IP 地址的子网匹配，支持 CIDR 表示法：
-
-```
-匹配类型：MASK
-字段：IP 地址（4 字节）
-
-示例 1：匹配单个 IP
-  192.168.1.10/32  → 只匹配 192.168.1.10
-
-示例 2：匹配子网
-  192.168.1.0/24   → 匹配 192.168.1.0 - 192.168.1.255
-
-示例 3：匹配所有 IP
-  0.0.0.0/0        → 匹配任意 IP 地址
-```
-
-**mask_range 字段**：存储 CIDR 的位数（0-32）
+用于 IP 地址的子网匹配，支持 CIDR 表示法。
 
 #### 2.4.2 RANGE（范围匹配）
 
-用于端口的范围匹配：
-
-```
-匹配类型：RANGE
-字段：端口（2 字节）
-
-示例 1：匹配单个端口
-  value = 80, mask_range = 80   → 只匹配端口 80
-
-示例 2：匹配端口范围
-  value = 1024, mask_range = 65535   → 匹配 1024-65535
-
-示例 3：匹配任意端口
-  value = 0, mask_range = 65535   → 匹配所有端口
-```
-
-**mask_range 字段**：存储范围的上界
+用于端口的范围匹配。
 
 #### 2.4.3 BITMASK（位掩码匹配）
 
-用于协议字段的精确或多值匹配：
-
-```
-匹配类型：BITMASK
-字段：协议（1 字节）
-
-示例 1：精确匹配 TCP
-  value = 6, mask_range = 0xFF   → 只匹配 TCP (6)
-
-示例 2：匹配 TCP 或 UDP
-  value = 6 | 17, mask_range = ...   → 匹配 TCP 或 UDP
-
-示例 3：匹配任意协议
-  value = 0, mask_range = 0   → 匹配所有协议
-```
-
-### 2.5 分类类别（Categories）
-
-ACL 支持 **多个独立的分类器**，称为 category：
-
-```
-单个 category（常用）：
-┌─────────────┐
-│  Category 0 │ → 所有规则在同一分类器
-│  规则 1-N   │
-└─────────────┘
-
-多个 category（高级）：
-┌─────────────┐  ┌─────────────┐
-│  Category 0 │  │  Category 1 │
-│  入站规则   │  │  出站规则   │
-└─────────────┘  └─────────────┘
-       ↓                ↓
-   入站匹配          出站匹配
-```
-
-**使用场景：**
-- **单 category**：大多数场景（防火墙、QoS）
-- **多 category**：需要同时应用多组规则（入站+出站过滤）
+用于协议字段的精确匹配。
 
 ---
 
 ## 三、数据结构详解
 
-### 3.1 字段定义结构 `rte_acl_field_def`
+### 3.1 ACL 配置结构
 
-定义 5 元组中每个字段的属性：
+```c
+struct rte_acl_config {
+    uint32_t num_categories;            // category 数量（通常为 1）
+    uint32_t num_fields;                // 字段数量（5 元组 = 5）
+    struct rte_acl_field_def defs[...]; // 字段定义数组
+};
+```
+
+因为我们是对网络协议的五元组进行识别，所以num_fields字段填写5，下面来看rte_acl_field_def结构体。
+
+
+
+### 3.2 字段定义结构 `rte_acl_field_def`
+
+**结构体字段说明**
 
 ```c
 struct rte_acl_field_def {
@@ -281,12 +203,22 @@ struct rte_acl_field_def {
 | 字段 | 说明 | 示例 |
 |------|------|------|
 | `type` | 匹配类型 | `RTE_ACL_FIELD_TYPE_MASK` (IP) |
-| `size` | 字段大小 | `sizeof(uint32_t)` (4 字节) |
+| `size` | 字段大小 | 端口字段占2个字节，就是`sizeof(uint16_t)` |
 | `field_index` | 字段编号 | 0, 1, 2, 3, 4 |
 | `input_index` | **4 字节对齐分组** | 协议(0), 源IP(1), 目的IP(2), 端口(3) |
 | `offset` | 内存偏移量 | `offsetof(struct ipv4_5tuple, proto)` |
 
-**关键点：input_index 的作用**
+
+
+**重点：type类型字段**
+
+- **RTE_ACL_FIELD_TYPE_MASK** - 适用于ip地址，需要用网络掩码来匹配一个范围的字段，比如192.168.1.0/24
+- **RTE_ACL_FIELD_TYPE_RANGE** - 用于像port这种需要在某个数值区间内匹配的字段，比如端口8000-9000
+- **RTE_ACL_FIELD_TYPE_BITMASK** - 用于像协议标识符这种具有值和位掩码的字段，比如TCP协议标识
+
+
+
+**重点：input_index 的作用**
 
 DPDK ACL 要求字段按 **4 字节边界分组**：
 
@@ -294,15 +226,17 @@ DPDK ACL 要求字段按 **4 字节边界分组**：
 5 元组内存布局：
 ┌─────────┬─────────┬─────────┬─────────┬─────────┐
 │  proto  │ src_ip  │ dst_ip  │src_port │dst_port │
-│ (1字节) │(4字节)  │(4字节)  │(2字节)  │(2字节)  │
+│ (1字节)  │(4字节)   │(4字节)  │(2字节)   │(2字节)  │
 └─────────┴─────────┴─────────┴─────────┴─────────┘
 input_index:
-    0         1         2         3         3
-    └─ 1B ─┘ └─ 4B ──┘ └─ 4B ──┘ └──── 4B ─────┘
+     0         1         2         3         3
+  └─ 1B ─┘ └─ 4B ──┘ └─ 4B ──┘ └────── 4B ───────┘
                                   (2B + 2B = 4B)
 ```
 
-**源端口和目的端口共享 `input_index = 3`**，因为它们合起来是 4 字节。
+所以**源端口和目的端口共享 `input_index = 3`**，因为它们合起来是 4 字节。
+
+
 
 ### 3.2 IPv4 五元组结构体
 
@@ -328,17 +262,33 @@ struct ipv4_5tuple {
 
 ### 3.3 ACL 规则结构
 
-使用宏定义规则结构体：
+使用**RTE_ACL_RULE_DEF**宏定义规则结构体：
 
 ```c
 RTE_ACL_RULE_DEF(acl_ipv4_rule, NUM_FIELDS_IPV4);
+```
 
-// 展开后相当于：
+**RTE_ACL_RULE_DEF**宏定义为：
+
+```
+#define	RTE_ACL_RULE_DEF(name, fld_num)	struct name {\
+	struct rte_acl_rule_data data;               \
+	struct rte_acl_field field[fld_num];         \
+}
+```
+
+展开后相当于：
+
+```
 struct acl_ipv4_rule {
     struct rte_acl_rule_data data;  // 元数据
     struct rte_acl_field field[5];  // 5 个字段
 };
 ```
+
+acl_ipv4_rule是分为元数据和字段数据两部分的。
+
+
 
 **元数据（`rte_acl_rule_data`）：**
 
@@ -346,9 +296,11 @@ struct acl_ipv4_rule {
 struct rte_acl_rule_data {
     uint32_t category_mask;  // 分类器掩码（位 0 = category 0）
     int32_t priority;        // 优先级（越大越高）
-    uint32_t userdata;       // 用户自定义数据（动作：ALLOW/DENY）
+    uint32_t userdata;       // 用户自定义数据（规则id）
 };
 ```
+
+
 
 **字段数据（`rte_acl_field`）：**
 
@@ -366,141 +318,220 @@ struct rte_acl_field {
         uint16_t u16;
         uint32_t u32;
         uint64_t u64;
-    } mask_range;   // 掩码或范围（取决于 type）
+    } mask_range;   // 掩码或范围（取决于 type，RTE_ACL_FIELD_TYPE_MASK，RTE_ACL_FIELD_TYPE_RANGE，RTE_ACL_FIELD_TYPE_BITMASK）
 };
 ```
 
-### 3.4 ACL 配置结构
 
-```c
-struct rte_acl_config {
-    uint32_t num_categories;            // category 数量（通常为 1）
-    uint32_t num_fields;                // 字段数量（5 元组 = 5）
-    struct rte_acl_field_def defs[...]; // 字段定义数组
-};
+
+## 四、ACL 示例编写流程
+
+### 4.1 完整开发流程图
+
+```
+┌────────────────────────────────────┐
+│  1. 初始化 EAL                     │
+│     rte_eal_init()                 │
+└─────────────┬──────────────────────┘
+              ↓
+┌────────────────────────────────────┐
+│  2. 创建 ACL 上下文                │
+│     rte_acl_create()               │
+└─────────────┬──────────────────────┘
+              ↓
+┌────────────────────────────────────┐
+│  3. 配置字段定义（使用标准宏）     │
+│     - RTE_ACL_IPV4VLAN_PROTO (0)   │
+│     - RTE_ACL_IPV4VLAN_SRC (2)     │
+│     - RTE_ACL_IPV4VLAN_DST (3)     │
+│     - RTE_ACL_IPV4VLAN_PORTS (4)   │
+└─────────────┬──────────────────────┘
+              ↓
+┌────────────────────────────────────┐
+│  4. 添加规则                       │
+│     rte_acl_add_rules()            │
+└─────────────┬──────────────────────┘
+              ↓
+┌────────────────────────────────────┐
+│  5. 构建 ACL (一次性)              │
+│     rte_acl_build()                │
+└─────────────┬──────────────────────┘
+              ↓
+┌────────────────────────────────────┐
+│  6. 批量分类数据包                 │
+│     rte_acl_classify()             │
+└─────────────┬──────────────────────┘
+              ↓
+┌────────────────────────────────────┐
+│  7. 处理结果并清理                 │
+│     rte_acl_free()                 │
+└────────────────────────────────────┘
 ```
 
 ---
 
-## 四、核心 API 概览
+### 4.2 关键步骤说明
+
+### 步骤 1-2: 初始化与创建上下文
+
+```c
+// 1. 初始化 EAL
+int ret = rte_eal_init(argc, argv);
+
+// 2. 创建 ACL 上下文
+struct rte_acl_param acl_param = {
+    .name = "ipv4_acl",
+    .socket_id = rte_socket_id(),               // NUMA 感知
+    .rule_size = RTE_ACL_RULE_SZ(NUM_FIELDS_IPV4),
+    .max_rule_num = MAX_ACL_RULES,
+};
+struct rte_acl_ctx *acl_ctx = rte_acl_create(&acl_param);
+```
+
+### 步骤 3: 配置字段定义
+
+定义如何解析五元组，使用 DPDK 标准宏：
+
+```c
+static struct rte_acl_field_def ipv4_defs[5] = {
+    /* 字段 0: 协议 (BITMASK) */
+    { .type = RTE_ACL_FIELD_TYPE_BITMASK, .size = 1,
+      .field_index = 0, .input_index = RTE_ACL_IPV4VLAN_PROTO, ... },
+    /* 字段 1: 源 IP (MASK, 支持 CIDR) */
+    { .type = RTE_ACL_FIELD_TYPE_MASK, .size = 4,
+      .field_index = 1, .input_index = RTE_ACL_IPV4VLAN_SRC, ... },
+    /* 字段 2: 目的 IP (MASK) */
+    { .type = RTE_ACL_FIELD_TYPE_MASK, .size = 4,
+      .field_index = 2, .input_index = RTE_ACL_IPV4VLAN_DST, ... },
+    /* 字段 3: 源端口 (RANGE) */
+    { .type = RTE_ACL_FIELD_TYPE_RANGE, .size = 2,
+      .field_index = 3, .input_index = RTE_ACL_IPV4VLAN_PORTS, ... },
+    /* 字段 4: 目的端口 (RANGE) - 与源端口共享 input_index */
+    { .type = RTE_ACL_FIELD_TYPE_RANGE, .size = 2,
+      .field_index = 4, .input_index = RTE_ACL_IPV4VLAN_PORTS, ... },
+};
+```
+
+**input_index 标准布局** (遵循 DPDK IPv4+VLAN 标准):
+- `RTE_ACL_IPV4VLAN_PROTO (0)`: 协议字段 + 3字节padding
+- `RTE_ACL_IPV4VLAN_VLAN (1)`: 预留给 VLAN (本示例未使用)
+- `RTE_ACL_IPV4VLAN_SRC (2)`: 源IP (4字节)
+- `RTE_ACL_IPV4VLAN_DST (3)`: 目的IP (4字节)
+- `RTE_ACL_IPV4VLAN_PORTS (4)`: 源端口+目的端口 (2+2=4字节)
+
+### 步骤 4: 添加规则
+
+```c
+// 规则 1: 允许 HTTP (端口 80) - 优先级 100
+make_rule(&rules[0], 100, 1,          // priority, userdata
+          IPPROTO_TCP, 0xFF,          // 协议: TCP
+          0, 0,                       // 源 IP: 任意
+          0, 0,                       // 目的 IP: 任意
+          0, 65535,                   // 源端口: 任意
+          80, 80);                    // 目的端口: 80
+
+// 批量添加
+rte_acl_add_rules(ctx, (struct rte_acl_rule *)rules, 3);
+```
+
+**关键点**:
+- 规则字段使用**主机字节序** (不需要 htonl/htons)
+- `priority` 数字越大优先级越高
+- `userdata` 可存储规则 ID 或动作
+
+### 步骤 5: 构建 ACL
+
+```c
+struct rte_acl_config cfg;
+setup_acl_config(&cfg);
+rte_acl_build(acl_ctx, &cfg);  // 生成优化的 trie 结构
+```
+
+**注意**: 必须在添加所有规则后调用，构建后不能再添加规则。
+
+### 步骤 6: 分类数据包
+
+```c
+// 准备数据包 (网络字节序!)
+packets[0].proto = IPPROTO_TCP;
+packets[0].ip_src = htonl(RTE_IPV4(192, 168, 1, 10));
+packets[0].port_dst = htons(80);
+
+// 批量分类
+const uint8_t *data[NUM_PACKETS];
+uint32_t results[NUM_PACKETS] = {0};
+for (i = 0; i < NUM_PACKETS; i++)
+    data[i] = (uint8_t *)&packets[i];
+
+rte_acl_classify(ctx, data, results, NUM_PACKETS, 1);
+
+// 检查结果
+if (results[i] == 1) {
+    printf("允许 (规则 %u)\n", results[i]);
+} else {
+    printf("拒绝 (规则 %u)\n", results[i]);
+}
+```
+
+**关键点**:
+- 数据包使用**网络字节序** (htonl/htons)，与规则的主机字节序相反
+- `results[i]` 包含匹配规则的 `userdata` 值
+- 批量分类性能更高 (推荐 32-64 个数据包)
+
+---
+
+### 4.3 字节序对照表
+
+| 数据类型 | 字节序 | 转换函数 | 示例 |
+|---------|--------|---------|------|
+| **规则字段** | 主机字节序 | 无需转换 | `RTE_IPV4(192, 168, 1, 0)` |
+| **数据包字段** | 网络字节序 | `htonl()`, `htons()` | `htonl(RTE_IPV4(192, 168, 1, 10))` |
+
+**为什么不同?**
+- 规则用主机序方便定义和读取
+- 数据包用网络序因为来自真实网络数据
+- ACL 引擎内部会自动处理字节序转换
+
+---
+
+### 4.4 完整示例位置
+
+完整的可运行代码: [14-acl-basic/acl_demo.c](../../14-acl-basic/acl_demo.c)
+
+**编译运行**:
+```bash
+cd /home/work/clionProject/dpdk-hands-on/build
+cmake ..
+make acl_demo
+sudo ../bin/acl_demo -l 0 --no-pci
+```
+
+**更详细的步骤分解和代码说明**，请查看单独的流程文档: [acl-workflow-enhanced.md](acl-workflow-enhanced.md)
+
+
+
+## 五、核心 API 概览
 
 本节简要介绍 ACL 的核心 API。详细的使用方法和代码示例请参考 **Lesson 14-2: ACL实战应用**。
 
-### 4.1 创建 ACL 上下文：`rte_acl_create()`
-
-**函数原型：**
-
-```c
-struct rte_acl_ctx *
-rte_acl_create(const struct rte_acl_param *param);
-```
-
-**参数说明：**
-
-```c
-struct rte_acl_param {
-    const char *name;      // ACL 名称（唯一）
-    int socket_id;         // NUMA socket ID（rte_socket_id()）
-    uint32_t rule_size;    // 单条规则大小（RTE_ACL_RULE_SZ(5)）
-    uint32_t max_rule_num; // 最大规则数量
-};
-```
+### 5.1 创建 ACL 上下文：`rte_acl_create()`
 
 **功能**：创建 ACL 上下文，分配内存和初始化数据结构。
 
-### 4.2 添加规则：`rte_acl_add_rules()`
 
-**函数原型：**
 
-```c
-int rte_acl_add_rules(struct rte_acl_ctx *ctx,
-                      const struct rte_acl_rule *rules,
-                      uint32_t num);
-```
+### 5.2 添加规则：`rte_acl_add_rules()`
 
 **功能**：向 ACL 上下文添加一条或多条规则。规则字段使用 **主机字节序**。
 
-### 4.3 构建 ACL：`rte_acl_build()`
 
-**函数原型：**
 
-```c
-int rte_acl_build(struct rte_acl_ctx *ctx,
-                  const struct rte_acl_config *cfg);
-```
+### 5.3 构建 ACL：`rte_acl_build()`
 
 **功能**：构建优化的 trie 结构。**必须在添加完所有规则后调用**，构建后不能再添加规则。
 
-### 4.4 分类数据包：`rte_acl_classify()`
 
-**函数原型：**
 
-```c
-int rte_acl_classify(const struct rte_acl_ctx *ctx,
-                     const uint8_t **data,
-                     uint32_t *results,
-                     uint32_t num,
-                     uint32_t categories);
-```
+### 5.4 分类数据包：`rte_acl_classify()`
 
 **功能**：对数据包进行分类，返回匹配规则的 `userdata`。数据包数据使用 **网络字节序**。
-
----
-
-## 总结
-
-本课程介绍了 DPDK ACL 的核心概念和数据结构：
-
-### 关键知识点
-
-1. **为什么需要 ACL**
-   - 传统线性查找的性能问题（O(n) 复杂度）
-   - ACL 使用 trie 结构实现高性能查找（O(1) 平均时间）
-   - 性能提升 10-200 倍
-
-2. **五元组匹配**
-   - src_ip, dst_ip, src_port, dst_port, protocol
-   - 唯一标识一个网络流
-
-3. **三种匹配类型**
-   - MASK（IP子网匹配，CIDR）
-   - RANGE（端口范围匹配）
-   - BITMASK（协议精确匹配）
-
-4. **优先级机制**
-   - 数字越大优先级越高
-   - 多条规则匹配时自动选择最高优先级
-
-5. **关键数据结构**
-   - `rte_acl_field_def`：字段定义
-   - `ipv4_5tuple`：五元组数据
-   - `acl_ipv4_rule`：规则结构
-   - `rte_acl_config`：ACL 配置
-
-6. **input_index 重要概念**
-   - 字段按 4 字节边界分组
-   - 源端口和目的端口共享同一 input_index
-
-### 字节序注意事项
-
-- **规则字段**：使用 **主机字节序**（不需要 htonl/htons）
-- **数据包数据**：使用 **网络字节序**（需要 htonl/htons 转换）
-
-### 下一步学习
-
-在 **Lesson 14-2: ACL实战应用** 中，你将学习：
-
-- ✅ 完整的 API 使用方法（含详细代码示例）
-- ✅ 如何构造 ACL 规则
-- ✅ 运行完整的防火墙演示程序
-- ✅ 编译、运行、调试 ACL 应用
-- ✅ 分类数据包并分析结果
-
-**继续学习**: [lesson14-2-acl-practice.md](lesson14-2-acl-practice.md)
-
----
-
-**参考资料：**
-
-- [DPDK 官方文档：Packet Classification and Access Control](https://doc.dpdk.org/guides/prog_guide/packet_classif_access_ctrl.html)
-- [DPDK API 参考：rte_acl.h](https://doc.dpdk.org/api/rte__acl_8h.html)
