@@ -24,13 +24,31 @@
 /* IPv4协议号已在 netinet/in.h 中定义 / IPv4 Protocol Numbers defined in netinet/in.h */
 /* IPPROTO_TCP = 6, IPPROTO_UDP = 17 */
 
-/* 字段索引枚举 / Field index enumeration */
+/* 字段索引枚举 (field_index) / Field index enumeration */
 enum {
 	PROTO_FIELD_IPV4,   // 协议字段 / Protocol field
 	SRC_FIELD_IPV4,     // 源IP字段 / Source IP field
 	DST_FIELD_IPV4,     // 目的IP字段 / Destination IP field
 	SRCP_FIELD_IPV4,    // 源端口字段 / Source port field
 	DSTP_FIELD_IPV4     // 目的端口字段 / Destination port field
+};
+
+/**
+ * input_index 标准布局 (遵循 DPDK IPv4+VLAN 标准)
+ * Standard input_index layout (following DPDK IPv4+VLAN standard)
+ *
+ * 这些宏定义源自 DPDK 测试代码 (app/test/test_acl.h)
+ * These macros are from DPDK test code (app/test/test_acl.h)
+ * 即使不使用 VLAN，也应遵循此标准布局以保持兼容性
+ * Even without VLAN, follow this standard layout for compatibility
+ */
+enum {
+	RTE_ACL_IPV4VLAN_PROTO = 0,  // 协议字段 / Protocol field
+	RTE_ACL_IPV4VLAN_VLAN = 1,   // VLAN字段 (本示例不使用) / VLAN field (unused)
+	RTE_ACL_IPV4VLAN_SRC = 2,    // 源IP字段 / Source IP field
+	RTE_ACL_IPV4VLAN_DST = 3,    // 目的IP字段 / Destination IP field
+	RTE_ACL_IPV4VLAN_PORTS = 4,  // 端口字段 (源端口和目的端口共享) / Port fields (shared)
+	RTE_ACL_IPV4VLAN_NUM = 5
 };
 
 /* IPv4五元组结构体 / IPv4 5-tuple structure */
@@ -63,6 +81,18 @@ static struct {
  * - 字段大小（1/2/4字节）
  * - 字段在结构体中的偏移量
  * - input_index用于4字节对齐分组
+ *
+ * input_index 标准布局 (遵循 DPDK IPv4+VLAN 标准):
+ * Standard input_index layout (following DPDK IPv4+VLAN standard):
+ *
+ *   input_index=0 (RTE_ACL_IPV4VLAN_PROTO): [proto=1字节][padding=3字节]
+ *   input_index=1 (RTE_ACL_IPV4VLAN_VLAN):  [未使用,预留给VLAN] / [Unused, reserved for VLAN]
+ *   input_index=2 (RTE_ACL_IPV4VLAN_SRC):   [ip_src=4字节]
+ *   input_index=3 (RTE_ACL_IPV4VLAN_DST):   [ip_dst=4字节]
+ *   input_index=4 (RTE_ACL_IPV4VLAN_PORTS): [port_src=2字节][port_dst=2字节]
+ *
+ * 注意: 即使不使用 VLAN，也跳过 input_index=1，以保持与 DPDK 标准一致
+ * Note: Even without VLAN, skip input_index=1 to maintain DPDK standard compatibility
  */
 static void
 setup_acl_config(struct rte_acl_config *cfg)
@@ -73,7 +103,7 @@ setup_acl_config(struct rte_acl_config *cfg)
 			.type = RTE_ACL_FIELD_TYPE_BITMASK,
 			.size = sizeof(uint8_t),
 			.field_index = PROTO_FIELD_IPV4,
-			.input_index = 0,
+			.input_index = RTE_ACL_IPV4VLAN_PROTO,
 			.offset = offsetof(struct ipv4_5tuple, proto),
 		},
 		/* 源IP字段：4字节，MASK类型（支持CIDR） / Source IP: 4 bytes, MASK type (CIDR support) */
@@ -81,7 +111,7 @@ setup_acl_config(struct rte_acl_config *cfg)
 			.type = RTE_ACL_FIELD_TYPE_MASK,
 			.size = sizeof(uint32_t),
 			.field_index = SRC_FIELD_IPV4,
-			.input_index = 1,
+			.input_index = RTE_ACL_IPV4VLAN_SRC,
 			.offset = offsetof(struct ipv4_5tuple, ip_src),
 		},
 		/* 目的IP字段：4字节，MASK类型 / Destination IP: 4 bytes, MASK type */
@@ -89,7 +119,7 @@ setup_acl_config(struct rte_acl_config *cfg)
 			.type = RTE_ACL_FIELD_TYPE_MASK,
 			.size = sizeof(uint32_t),
 			.field_index = DST_FIELD_IPV4,
-			.input_index = 2,
+			.input_index = RTE_ACL_IPV4VLAN_DST,
 			.offset = offsetof(struct ipv4_5tuple, ip_dst),
 		},
 		/* 源端口字段：2字节，RANGE类型 / Source port: 2 bytes, RANGE type */
@@ -97,7 +127,7 @@ setup_acl_config(struct rte_acl_config *cfg)
 			.type = RTE_ACL_FIELD_TYPE_RANGE,
 			.size = sizeof(uint16_t),
 			.field_index = SRCP_FIELD_IPV4,
-			.input_index = 3,
+			.input_index = RTE_ACL_IPV4VLAN_PORTS,
 			.offset = offsetof(struct ipv4_5tuple, port_src),
 		},
 		/* 目的端口字段：2字节，RANGE类型（与源端口共享input_index） / Dest port: 2 bytes, RANGE type (shared input_index) */
@@ -105,7 +135,7 @@ setup_acl_config(struct rte_acl_config *cfg)
 			.type = RTE_ACL_FIELD_TYPE_RANGE,
 			.size = sizeof(uint16_t),
 			.field_index = DSTP_FIELD_IPV4,
-			.input_index = 3,  // 与源端口共享同一input_index（4字节对齐）/ Shared with src port (4-byte alignment)
+			.input_index = RTE_ACL_IPV4VLAN_PORTS,
 			.offset = offsetof(struct ipv4_5tuple, port_dst),
 		},
 	};
@@ -252,29 +282,6 @@ add_acl_rules(struct rte_acl_ctx *ctx)
 		rte_exit(EXIT_FAILURE, "  错误：添加规则失败: %s\n", strerror(-ret));
 	}
 	printf("  ✓ 成功添加 5 条规则\n\n");
-}
-
-/**
- * 构建ACL / Build ACL
- *
- * 必须在添加完所有规则后调用，构建优化的trie结构
- * Must be called after adding all rules to build the optimized trie structure
- */
-static void
-build_acl(struct rte_acl_ctx *ctx)
-{
-	struct rte_acl_config cfg;
-	int ret;
-
-	printf("[步骤 3] 构建ACL...\n");
-
-	setup_acl_config(&cfg);
-
-	ret = rte_acl_build(ctx, &cfg);
-	if (ret != 0) {
-		rte_exit(EXIT_FAILURE, "  错误：构建ACL失败: %s\n", strerror(-ret));
-	}
-	printf("  ✓ ACL构建成功\n\n");
 }
 
 /**
@@ -434,13 +441,33 @@ main(int argc, char **argv)
 	printf("=== DPDK ACL 演示：IPv4防火墙 ===\n\n");
 
 	/* 1. 创建ACL上下文 / Create ACL context */
-	acl_ctx = create_acl_context();
+	struct rte_acl_param acl_param = {
+		.name = "ipv4_acl",
+		.socket_id = rte_socket_id(),
+		.rule_size = RTE_ACL_RULE_SZ(NUM_FIELDS_IPV4),
+		.max_rule_num = MAX_ACL_RULES,
+	};
+
+	printf("[步骤 1] 创建ACL上下文...\n");
+	acl_ctx = rte_acl_create(&acl_param);
+	if (acl_ctx == NULL) {
+		rte_exit(EXIT_FAILURE, "  错误：无法创建ACL上下文\n");
+	}
+	printf("  ✓ 成功创建ACL上下文: %s\n\n", acl_param.name);
 
 	/* 2. 添加规则 / Add rules */
 	add_acl_rules(acl_ctx);
 
 	/* 3. 构建ACL / Build ACL */
-	build_acl(acl_ctx);
+	printf("[步骤 3] 构建ACL...\n");
+	struct rte_acl_config cfg;
+
+	setup_acl_config(&cfg);
+	ret = rte_acl_build(acl_ctx, &cfg);
+	if (ret != 0) {
+		rte_exit(EXIT_FAILURE, "  错误：构建ACL失败: %s\n", strerror(-ret));
+	}
+	printf("  ✓ ACL构建成功\n\n");
 
 	/* 4. 创建测试数据包 / Create test packets */
 	create_test_packets(test_packets);
