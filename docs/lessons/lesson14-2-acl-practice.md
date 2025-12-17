@@ -10,16 +10,11 @@
 
 **前置知识**: 完成 [Lesson 14-1: ACL入门与核心概念](lesson14-1-acl-basics.md)
 
-**学习目标**:
-- 掌握 ACL API 的详细使用方法
-- 能够独立编写 ACL 防火墙程序
-- 理解规则配置和数据包分类流程
-
 ---
 
-## 四、核心 API 详解
+## 一、核心 API 详解
 
-### 4.1 创建 ACL 上下文：`rte_acl_create()`
+### 1.1 创建 ACL 上下文：`rte_acl_create()`
 
 **函数原型：**
 
@@ -66,7 +61,7 @@ if (acl_ctx == NULL) {
 }
 ```
 
-### 4.2 添加规则：`rte_acl_add_rules()`
+### 1.2 添加规则：`rte_acl_add_rules()`
 
 **函数原型：**
 
@@ -88,51 +83,13 @@ int rte_acl_add_rules(struct rte_acl_ctx *ctx,
 - 成功：0
 - 失败：负数错误码
 
-**示例代码：允许 HTTP 流量**
 
-```c
-struct acl_ipv4_rule rule;
-memset(&rule, 0, sizeof(rule));
-
-// 设置元数据
-rule.data.category_mask = 1;      // Category 0
-rule.data.priority = 100;         // 高优先级
-rule.data.userdata = ACL_ALLOW;   // 动作：允许
-
-// 字段 0：协议 = TCP (6)
-rule.field[PROTO_FIELD_IPV4].value.u8 = IPPROTO_TCP;
-rule.field[PROTO_FIELD_IPV4].mask_range.u8 = 0xFF;  // 精确匹配
-
-// 字段 1：源 IP = 192.168.1.0/24（主机字节序！）
-rule.field[SRC_FIELD_IPV4].value.u32 = RTE_IPV4(192, 168, 1, 0);
-rule.field[SRC_FIELD_IPV4].mask_range.u32 = 24;  // CIDR /24
-
-// 字段 2：目的 IP = 任意
-rule.field[DST_FIELD_IPV4].value.u32 = 0;
-rule.field[DST_FIELD_IPV4].mask_range.u32 = 0;  // 匹配所有
-
-// 字段 3：源端口 = 任意
-rule.field[SRCP_FIELD_IPV4].value.u16 = 0;
-rule.field[SRCP_FIELD_IPV4].mask_range.u16 = 65535;  // 范围 0-65535
-
-// 字段 4：目的端口 = 80
-rule.field[DSTP_FIELD_IPV4].value.u16 = 80;
-rule.field[DSTP_FIELD_IPV4].mask_range.u16 = 80;  // 范围 80-80（精确）
-
-// 添加规则
-int ret = rte_acl_add_rules(acl_ctx, (struct rte_acl_rule *)&rule, 1);
-if (ret != 0) {
-    rte_exit(EXIT_FAILURE, "添加规则失败: %s\n", strerror(-ret));
-}
-```
 
 **关键点：**
 - 规则字段值使用 **主机字节序**（不需要 htonl/htons）
-- MASK 类型：`mask_range` 是 CIDR 位数（0-32）
-- RANGE 类型：`mask_range` 是范围上界
-- `userdata` 可以存储任意 32 位值（如 ALLOW/DENY）
+- `userdata` 可以存储任意 32 位值（如 规则ID值）
 
-### 4.3 构建 ACL：`rte_acl_build()`
+### 1.3 构建 ACL：`rte_acl_build()`
 
 **函数原型：**
 
@@ -168,9 +125,9 @@ if (ret != 0) {
 - **必须在添加所有规则后调用**
 - 构建后会创建优化的 trie 结构
 - 构建后不能再添加规则（除非先 `rte_acl_reset()`）
-- 这是一个相对耗时的操作，但只需执行一次
+- 这是一个比较耗时的操作，但只需执行一次
 
-### 4.4 分类数据包：`rte_acl_classify()`
+### 1.4 分类数据包：`rte_acl_classify()`
 
 **函数原型：**
 
@@ -193,39 +150,9 @@ int rte_acl_classify(const struct rte_acl_ctx *ctx,
 | `categories` | `uint32_t` | category 数量（通常为 1） |
 
 **返回值：**
+
 - 成功：0
-- 失败：负数错误码
-
-**示例代码：分类单个数据包**
-
-```c
-// 准备测试数据包（网络字节序！）
-struct ipv4_5tuple pkt;
-pkt.proto = IPPROTO_TCP;
-pkt.ip_src = htonl(RTE_IPV4(192, 168, 1, 10));  // 注意：网络字节序
-pkt.ip_dst = htonl(RTE_IPV4(10, 0, 0, 1));
-pkt.port_src = htons(12345);
-pkt.port_dst = htons(80);
-
-// 准备数据指针和结果数组
-const uint8_t *data[1] = { (uint8_t *)&pkt };
-uint32_t results[1] = { 0 };
-
-// 分类
-int ret = rte_acl_classify(acl_ctx, data, results, 1, 1);
-if (ret != 0) {
-    rte_exit(EXIT_FAILURE, "分类失败: %s\n", strerror(-ret));
-}
-
-// 检查结果
-if (results[0] == ACL_ALLOW) {
-    printf("数据包被允许\n");
-} else if (results[0] == ACL_DENY) {
-    printf("数据包被拒绝\n");
-} else {
-    printf("无匹配规则\n");
-}
-```
+- 失败：负数的错误码
 
 **批量分类示例：**
 
@@ -251,6 +178,7 @@ for (int i = 0; i < BATCH_SIZE; i++) {
 ```
 
 **关键点：**
+
 - 数据包数据必须使用 **网络字节序**（与规则的主机字节序相反！）
 - 使用 `htonl()` 和 `htons()` 转换字节序
 - 批量分类比单个分类效率更高（推荐 32-64 个数据包）
@@ -259,11 +187,11 @@ for (int i = 0; i < BATCH_SIZE; i++) {
 
 ---
 
-## 五、完整示例代码
+## 二、完整示例代码
 
 完整示例代码位于 [14-acl/acl_demo.c](14-acl/acl_demo.c)。
 
-### 5.1 程序流程
+### 2.1 程序流程
 
 ```
 ┌─────────────────────┐
@@ -302,7 +230,7 @@ for (int i = 0; i < BATCH_SIZE; i++) {
 └─────────────────────┘
 ```
 
-### 5.2 字段定义配置（acl_demo.c:68-117）
+### 2.2 字段定义配置（acl_demo.c:68-117）
 
 字段定义是 ACL 的核心配置，决定了如何解析 5 元组：
 
@@ -360,7 +288,7 @@ setup_acl_config(struct rte_acl_config *cfg)
 }
 ```
 
-### 5.3 规则定义（acl_demo.c:192-255）
+### 2.3 规则定义（acl_demo.c:192-255）
 
 演示 5 条规则，展示不同的匹配特性：
 
@@ -399,7 +327,7 @@ make_rule(struct acl_ipv4_rule *rule, uint32_t priority, uint32_t userdata,
 }
 ```
 
-### 5.4 测试数据包（acl_demo.c:287-328）
+### 3.4 测试数据包（acl_demo.c:287-328）
 
 5 个测试场景：
 
@@ -489,43 +417,7 @@ sudo ../bin/acl_demo -l 0 --no-pci
 sudo ../bin/acl_demo -l 0-1 --no-pci
 ```
 
-**预期输出：**
 
-```
-=== DPDK ACL 演示：IPv4防火墙 ===
-
-[步骤 1] 创建ACL上下文...
-  ✓ 成功创建ACL上下文: ipv4_acl
-
-[步骤 2] 添加防火墙规则...
-  规则1: 允许 HTTP (端口80) 来自 192.168.1.0/24 [优先级 100]
-  规则2: 拒绝  SSH (端口22) 来自任意地址    [优先级 90]
-  规则3: 允许  DNS (UDP端口53) 来自任意地址  [优先级 80]
-  规则4: 允许  高端口范围 (1024-65535)      [优先级 50]
-  规则5: 拒绝  所有其他流量（默认拒绝）      [优先级 10]
-  ✓ 成功添加 5 条规则
-
-[步骤 3] 构建ACL...
-  ✓ ACL构建成功
-
-[步骤 4] 分类测试数据包...
-  数据包1: 192.168.1.10:12345 → 10.0.0.1:80    (TCP)  → 允许 (规则1)
-  数据包2: 10.0.0.5:54321     → 10.0.0.1:22    (TCP)  → 拒绝  (规则2)
-  数据包3: 8.8.8.8:33445      → 10.0.0.1:53    (UDP)  → 允许 (规则3)
-  数据包4: 172.16.0.100:44556 → 10.0.0.1:8080  (TCP)  → 允许 (规则4)
-  数据包5: 203.0.113.5:11223  → 10.0.0.1:445   (TCP)  → 拒绝  (规则5)
-
-[统计信息]
-  总数据包: 5
-  允许: 3
-  拒绝: 2
-
-[清理]
-  ✓ ACL上下文已释放
-  ✓ EAL已清理
-
-=== 演示结束 ===
-```
 
 ### 6.3 结果分析
 
@@ -536,57 +428,6 @@ sudo ../bin/acl_demo -l 0-1 --no-pci
 | 3 | 规则 3 | 允许 | DNS 查询（UDP 端口 53） |
 | 4 | 规则 4 | 允许 | 高端口范围 8080 ∈ [1024, 65535] |
 | 5 | 规则 5 | 拒绝 | 默认拒绝（端口 445 < 1024） |
-
----
-
-## 实践任务
-
-完成以下任务以巩固学习：
-
-### 任务 1：运行演示程序
-
-编译并运行 `acl_demo`，观察5个测试数据包的匹配结果。
-
-```bash
-cd /home/work/clionProject/dpdk-hands-on/build
-make acl_demo
-sudo ../bin/acl_demo -l 0 --no-pci
-```
-
-### 任务 2：修改规则
-
-将规则1的端口从 80 (HTTP) 改为 443 (HTTPS)：
-
-1. 编辑 `14-acl/acl_demo.c:206`
-2. 将 `80, 80` 改为 `443, 443`
-3. 重新编译运行，观察结果变化
-
-### 任务 3：添加新规则
-
-添加一条规则拒绝 FTP 流量（端口 21）：
-
-1. 在 `add_acl_rules()` 函数中添加第6条规则
-2. 优先级设置为 95（比SSH高）
-3. 创建对应的测试数据包
-4. 验证规则生效
-
-**提示代码**:
-```c
-make_rule(&rules[5], 95, ACL_DENY,
-          IPPROTO_TCP, 0xFF,
-          0, 0,
-          0, 0,
-          0, 65535,
-          21, 21);  // FTP端口
-```
-
-### 任务 4：批量测试
-
-修改代码测试 32 个数据包的批量分类：
-
-1. 将 `NUM_TEST_PACKETS` 改为 32
-2. 在 `create_test_packets()` 中生成更多测试数据
-3. 观察批量分类的性能
 
 ---
 
