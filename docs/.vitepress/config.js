@@ -95,10 +95,20 @@ export default defineConfig({
           ]
         },
         {
-          text: '其他',
+          text: 'ACL 访问控制列表',
           collapsed: false,
           items: [
-            { text: '时间周期与性能测试', link: '/lessons/lesson-time-cycles-benchmark' }
+            { text: 'Lesson 14-1: ACL 基础', link: '/lessons/lesson14-1-acl-basics' },
+            { text: 'Lesson 14-2: ACL 实战', link: '/lessons/lesson14-2-acl-practice' },
+            { text: 'Lesson 14-3: ACL 进阶', link: '/lessons/lesson14-3-acl-advanced' }
+          ]
+        },
+        {
+          text: '系统与性能',
+          collapsed: false,
+          items: [
+            { text: 'Lesson 15: NUMA 基础', link: '/lessons/lesson15-basic-numa' },
+            { text: 'Lesson 16: 时间周期与性能测试', link: '/lessons/lesson16-basic-time-cycles' }
           ]
         }
       ],
