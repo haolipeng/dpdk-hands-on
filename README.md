@@ -20,13 +20,22 @@ dpdk-hands-on/
 ├── 4-parse_packet/               # Lesson 4 源代码
 ├── 5-mempool_usage/              # Lesson 5 源代码
 ├── 6-flow_manager/               # Lesson 6 源代码
-├── lesson1-helloworld.md         # Lesson 1 教程文档
-├── lesson2-hash.md               # Lesson 2 教程文档
-├── lesson3-capture-packet.md     # Lesson 3 教程文档
-├── lesson4-parse-packet.md       # Lesson 4 教程文档
-├── lesson5-mempool.md            # Lesson 5 教程文档
-├── lesson6-flowmanager.md        # Lesson 6 教程文档
-├── lesson7-multiprocess.md       # Lesson 7 教程文档（理论）
+├── docs/
+│   └── lessons/                  # 教程文档目录
+│       ├── lesson1-helloworld.md
+│       ├── lesson2-hash.md
+│       ├── lesson3-capture-packet.md
+│       ├── lesson4-parse-packet.md
+│       ├── lesson5-mempool.md
+│       ├── lesson6-flowmanager.md
+│       ├── lesson12-hts-ring.md
+│       ├── lesson13-mbuf-beginner.md
+│       ├── lesson14-1-acl-basics.md
+│       ├── lesson14-2-acl-practice.md
+│       ├── lesson14-3-acl-advanced.md
+│       ├── lesson15-basic-numa.md
+│       ├── lesson16-basic-time-cycles.md
+│       └── picture/               # 教程配图目录
 ├── picture/                      # 教程配图目录
 ├── CMakeLists.txt                # 根 CMake 配置
 └── README.md                     # 本文档
@@ -35,7 +44,7 @@ dpdk-hands-on/
 ## 教程和示例程序
 
 ### Lesson 1: Hello World (`1-helloworld/`)
-📖 **教程**: [lesson1-helloworld.md](lesson1-helloworld.md)
+📖 **教程**: [lesson1-helloworld.md](docs/lessons/lesson1-helloworld.md)
 
 **功能**: DPDK 基础入门示例
 
@@ -57,7 +66,7 @@ sudo ./bin/helloworld -l 0-1
 ---
 
 ### Lesson 2: Hash Table Usage (`2-hash_usage/`)
-📖 **教程**: [lesson2-hash.md](lesson2-hash.md)
+📖 **教程**: [lesson2-hash.md](docs/lessons/lesson2-hash.md)
 
 **功能**: DPDK 哈希表使用示例
 
@@ -80,7 +89,7 @@ sudo ./bin/hash_usage -l 0
 ---
 
 ### Lesson 3: Capture Packet (`3-capture_packet/`)
-📖 **教程**: [lesson3-capture-packet.md](lesson3-capture-packet.md)
+📖 **教程**: [lesson3-capture-packet.md](docs/lessons/lesson3-capture-packet.md)
 
 **功能**: 网络数据包捕获程序
 
@@ -110,7 +119,7 @@ sudo ./bin/capture_packet -l 0 --log-level=8
 ---
 
 ### Lesson 4: Parse Packet (`4-parse_packet/`)
-📖 **教程**: [lesson4-parse-packet.md](lesson4-parse-packet.md)
+📖 **教程**: [lesson4-parse-packet.md](docs/lessons/lesson4-parse-packet.md)
 
 **功能**: 深度数据包解析程序
 
@@ -135,7 +144,7 @@ sudo ./bin/parse_packet -l 0
 ---
 
 ### Lesson 5: Mempool Usage (`5-mempool_usage/`)
-📖 **教程**: [lesson5-mempool.md](lesson5-mempool.md)
+📖 **教程**: [lesson5-mempool.md](docs/lessons/lesson5-mempool.md)
 
 **功能**: DPDK 内存池使用示例
 
@@ -162,7 +171,7 @@ sudo ./bin/mempool_usage -l 0
 ---
 
 ### Lesson 6: Flow Manager (`6-flow_manager/`)
-📖 **教程**: [lesson6-flowmanager.md](lesson6-flowmanager.md)
+📖 **教程**: [lesson6-flowmanager.md](docs/lessons/lesson6-flowmanager.md)
 
 **功能**: TCP 流管理器
 
@@ -189,9 +198,9 @@ sudo ./bin/flow_manager -l 0
 ---
 
 ### Lesson 7: Multi-Process Architecture
-📖 **教程**: [lesson7-multiprocess.md](lesson7-multiprocess.md)
+📖 **教程**: 多进程实践示例（见 7-multiprocess/ 目录中的 README）
 
-**说明**: 多进程架构理论教程（暂无代码示例）
+**说明**: 多进程架构实践示例
 
 **学习要点**:
 - DPDK 多进程模型
@@ -204,7 +213,7 @@ sudo ./bin/flow_manager -l 0
 ### Lesson 14: ACL (Access Control List) 三部曲
 
 #### Lesson 14-1: ACL 入门与核心概念
-📖 **教程**: [lesson14-1-acl-basics.md](lesson14-1-acl-basics.md)
+📖 **教程**: [lesson14-1-acl-basics.md](docs/lessons/lesson14-1-acl-basics.md)
 
 **功能**: ACL 基础概念和数据结构
 
@@ -224,7 +233,7 @@ sudo ./bin/flow_manager -l 0
 ---
 
 #### Lesson 14-2: ACL 实战应用
-📖 **教程**: [lesson14-2-acl-practice.md](lesson14-2-acl-practice.md)
+📖 **教程**: [lesson14-2-acl-practice.md](docs/lessons/lesson14-2-acl-practice.md)
 
 **功能**: 完整的 ACL 防火墙演示程序
 
@@ -249,7 +258,7 @@ sudo ./bin/acl_demo -l 0 --no-pci
 ---
 
 #### Lesson 14-3: ACL 性能优化与进阶
-📖 **教程**: [lesson14-3-acl-advanced.md](lesson14-3-acl-advanced.md)
+📖 **教程**: [lesson14-3-acl-advanced.md](docs/lessons/lesson14-3-acl-advanced.md)
 
 **功能**: ACL 性能优化和高级应用
 

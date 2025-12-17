@@ -76,14 +76,19 @@ Each lesson directory contains:
 
 ### Documentation Structure
 
-Every lesson has an accompanying markdown file:
-- `lessonN-<topic>.md` - Tutorial explaining concepts and code
-- Additional guides: `DPDK-Ring-Practical-Guide.md`, `DPDK-Mbuf-Practical-Guide.md`, `DPDK-NUMA-Guide.md`, etc.
+All documentation is located in the `docs/lessons/` directory:
+- `docs/lessons/lessonN-<topic>.md` - Tutorial explaining concepts and code
+- `docs/lessons/picture/` - Images and diagrams used in tutorials
+- Additional guides in `docs/lessons/`:
+  - `lesson12-hts-ring.md` - HTS Ring practical guide
+  - `lesson13-mbuf-beginner.md` - Mbuf beginner's guide
+  - `lesson15-basic-numa.md` - NUMA basics
+  - `lesson16-basic-time-cycles.md` - Time and cycles basics
 
 **Note on Lesson 14 (ACL)**: This lesson has been split into 3 parts for better learning experience:
-- `lesson14-1-acl-basics.md` - ACL fundamentals and core concepts
-- `lesson14-2-acl-practice.md` - Complete API usage and practical examples
-- `lesson14-3-acl-advanced.md` - Performance optimization and advanced topics
+- `docs/lessons/lesson14-1-acl-basics.md` - ACL fundamentals and core concepts
+- `docs/lessons/lesson14-2-acl-practice.md` - Complete API usage and practical examples
+- `docs/lessons/lesson14-3-acl-advanced.md` - Performance optimization and advanced topics
 
 ## Key DPDK Concepts Used
 

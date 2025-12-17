@@ -55,7 +55,7 @@
 
 在实际开发中，使用 Wireshark 等工具可以帮助我们理解数据包结构：
 
-![数据包解析示例](/picture/image-20250913144806585.png)
+![数据包解析示例](./picture/image-20250913144806585.png)
 
 **Wireshark 界面说明：**
 - **左下方：** 显示每一层协议的字段名称和值（人类可读格式）
@@ -202,7 +202,7 @@ mbuf 内存布局：
 
 **含义：** "mbuf to data" - 获取 mbuf 中数据的起始指针
 
-![rte_pktmbuf_mtod 示意图](/picture/image-20250913151335596.png)
+![rte_pktmbuf_mtod 示意图](./picture/image-20250913151335596.png)
 
 **函数原型：**
 ```c
@@ -233,7 +233,7 @@ struct rte_ether_hdr *eth_hdr = rte_pktmbuf_mtod(pkt, struct rte_ether_hdr *);
 
 **含义：** 获取 mbuf 中带偏移的数据指针
 
-![rte_pktmbuf_mtod_offset 示意图](/picture/image-20250913151359415.png)
+![rte_pktmbuf_mtod_offset 示意图](./picture/image-20250913151359415.png)
 
 **函数原型：**
 ```c
