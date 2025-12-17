@@ -215,6 +215,19 @@ sudo ./bin/mp_comm_client -l 2 --proc-type=secondary
 - Free resources in reverse order of allocation
 - Signal handlers should set volatile flags, not directly exit
 
+### Git Commit Guidelines
+
+When creating git commits, follow these rules:
+
+- Use conventional commit format: `type(scope): description`
+  - Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, etc.
+  - Example: `docs(lesson14): add ACL tutorial`
+- Keep commit messages concise and descriptive
+- **DO NOT include AI-generated metadata** such as:
+  - "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+  - "Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
+- Focus on describing what changed and why, not the tools used
+
 ### Common Patterns
 
 **EAL Initialization**:
