@@ -73,27 +73,6 @@ static struct {
 	uint32_t denied;
 } stats = {0};
 
-/**
- * 配置ACL字段定义 / Setup ACL field definitions
- *
- * 这个函数配置了IPv4 5元组的字段定义，包括：
- * - 字段类型（MASK/RANGE/BITMASK）
- * - 字段大小（1/2/4字节）
- * - 字段在结构体中的偏移量
- * - input_index用于4字节对齐分组
- *
- * input_index 标准布局 (遵循 DPDK IPv4+VLAN 标准):
- * Standard input_index layout (following DPDK IPv4+VLAN standard):
- *
- *   input_index=0 (RTE_ACL_IPV4VLAN_PROTO): [proto=1字节][padding=3字节]
- *   input_index=1 (RTE_ACL_IPV4VLAN_VLAN):  [未使用,预留给VLAN] / [Unused, reserved for VLAN]
- *   input_index=2 (RTE_ACL_IPV4VLAN_SRC):   [ip_src=4字节]
- *   input_index=3 (RTE_ACL_IPV4VLAN_DST):   [ip_dst=4字节]
- *   input_index=4 (RTE_ACL_IPV4VLAN_PORTS): [port_src=2字节][port_dst=2字节]
- *
- * 注意: 即使不使用 VLAN，也跳过 input_index=1，以保持与 DPDK 标准一致
- * Note: Even without VLAN, skip input_index=1 to maintain DPDK standard compatibility
- */
 static void
 setup_acl_config(struct rte_acl_config *cfg)
 {
@@ -147,29 +126,6 @@ setup_acl_config(struct rte_acl_config *cfg)
 }
 
 /**
- * 创建ACL上下文 / Create ACL context
- */
-static struct rte_acl_ctx *
-create_acl_context(void)
-{
-	struct rte_acl_param acl_param = {
-		.name = "ipv4_acl",
-		.socket_id = rte_socket_id(),
-		.rule_size = RTE_ACL_RULE_SZ(NUM_FIELDS_IPV4),
-		.max_rule_num = MAX_ACL_RULES,
-	};
-
-	printf("[步骤 1] 创建ACL上下文...\n");
-	acl_ctx = rte_acl_create(&acl_param);
-	if (acl_ctx == NULL) {
-		rte_exit(EXIT_FAILURE, "  错误：无法创建ACL上下文\n");
-	}
-	printf("  ✓ 成功创建ACL上下文: %s\n\n", acl_param.name);
-
-	return acl_ctx;
-}
-
-/**
  * 辅助函数：构造ACL规则 / Helper: construct ACL rule
  */
 static void
@@ -210,8 +166,6 @@ make_rule(struct acl_ipv4_rule *rule, uint32_t priority, uint32_t userdata,
 
 /**
  * 添加ACL规则 / Add ACL rules
- *
- * 演示5条规则：/ Demonstrates 5 rules:
  * 1. 允许来自192.168.1.0/24的HTTP流量 / Allow HTTP from 192.168.1.0/24
  * 2. 拒绝所有SSH流量 / Deny all SSH
  * 3. 允许DNS查询（UDP） / Allow DNS queries (UDP)
@@ -450,6 +404,7 @@ main(int argc, char **argv)
 
 	printf("[步骤 1] 创建ACL上下文...\n");
 	acl_ctx = rte_acl_create(&acl_param);
+	
 	if (acl_ctx == NULL) {
 		rte_exit(EXIT_FAILURE, "  错误：无法创建ACL上下文\n");
 	}

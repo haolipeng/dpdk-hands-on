@@ -59,20 +59,6 @@ RTE_ACL_RULE_DEF(acl_ipv4_rule, NUM_FIELDS_IPV4);
 /* 全局ACL上下文 */
 static struct rte_acl_ctx *acl_ctx = NULL;
 
-/**
- * 配置ACL字段定义
- *
- * input_index 标准布局 (遵循 DPDK IPv4+VLAN 标准):
- * ACL引擎要求每个input_index对应4字节数据,实现硬件加速需要的内存对齐:
- *
- *   input_index=0 (RTE_ACL_IPV4VLAN_PROTO): [proto=1字节][padding=3字节]
- *   input_index=1 (RTE_ACL_IPV4VLAN_VLAN):  [未使用,预留给VLAN]
- *   input_index=2 (RTE_ACL_IPV4VLAN_SRC):   [ip_src=4字节]
- *   input_index=3 (RTE_ACL_IPV4VLAN_DST):   [ip_dst=4字节]
- *   input_index=4 (RTE_ACL_IPV4VLAN_PORTS): [port_src=2字节][port_dst=2字节]
- *
- * 注意: 即使不使用 VLAN，也跳过 input_index=1，以保持与 DPDK 标准一致
- */
 static void
 setup_acl_config(struct rte_acl_config *cfg)
 {
@@ -125,6 +111,16 @@ setup_acl_config(struct rte_acl_config *cfg)
 	memcpy(cfg->defs, ipv4_defs, sizeof(ipv4_defs));
 }
 
+/**
+ * 构造ACL规则
+ * 参数说明:
+ * rule: 规则结构体指针 priority: 优先级 userdata: 用户数据
+ * proto: 协议 proto_mask: 协议掩码
+ * src_ip: 源IP src_mask_len: 源IP掩码长度
+ * dst_ip: 目的IP dst_mask_len: 目的IP掩码长度
+ * src_port_low: 源端口低 src_port_high: 源端口高
+ * dst_port_low: 目的端口低 dst_port_high: 目的端口高
+ */
 static void
 make_rule(struct acl_ipv4_rule *rule, uint32_t priority, uint32_t userdata,
           uint8_t proto, uint8_t proto_mask,
@@ -176,7 +172,8 @@ add_acl_rules(struct rte_acl_ctx *ctx)
 	printf("[步骤2] 添加防火墙规则...\n");
 
 	/* 规则1: 允许HTTP (端口80) */
-	make_rule(&rules[0], 100, 1,              /* priority=100, userdata=规则ID 1 */
+	uint32_t ruleID = 1;
+	make_rule(&rules[0], 100, ruleID,              /* priority=100, userdata=规则ID 1 */
 	          IPPROTO_TCP, 0xFF,              /* TCP协议 */
 	          0, 0,                           /* 源IP: 任意 */
 	          0, 0,                           /* 目的IP: 任意 */
@@ -185,7 +182,8 @@ add_acl_rules(struct rte_acl_ctx *ctx)
 	printf("  规则1: 允许 HTTP (端口80)           [优先级 100]\n");
 
 	/* 规则2: 默认拒绝所有 */
-	make_rule(&rules[1], 10, 2,               /* priority=10, userdata=规则ID 3 */
+	ruleID = 2;
+	make_rule(&rules[1], 10, ruleID,               /* priority=10, userdata=规则ID 2 */
 	          0, 0,                           /* 任意协议 */
 	          0, 0,
 	          0, 0,
@@ -315,7 +313,6 @@ main(int argc, char **argv)
 	/* 步骤3: 构建ACL */
 	printf("[步骤3] 构建ACL...\n");
 	struct rte_acl_config cfg;
-
 	setup_acl_config(&cfg);
 	ret = rte_acl_build(acl_ctx, &cfg);
 	if (ret != 0) {

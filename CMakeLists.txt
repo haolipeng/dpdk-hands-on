@@ -69,6 +69,8 @@ add_subdirectory(20-statistics)
 add_subdirectory(21-ip_fragmentation)
 add_subdirectory(22-pcap_capture)
 add_subdirectory(23-lpm_routing)
+add_subdirectory(24-graph-basic)
+add_subdirectory(25-eventdev-basic)
 
 # 打印配置信息
 message(STATUS "DPDK version: ${DPDK_VERSION}")

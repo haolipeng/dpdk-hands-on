@@ -19,15 +19,14 @@
 **函数原型：**
 
 ```c
-struct rte_acl_ctx *
-rte_acl_create(const struct rte_acl_param *param);
+struct rte_acl_ctx * rte_acl_create(const struct rte_acl_param *param);
 ```
 
 **参数说明：**
 
 ```c
 struct rte_acl_param {
-    const char *name;      // ACL 名称（唯一）
+    const char *name;      // ACL 名称（要保证唯一性）
     int socket_id;         // NUMA socket ID（rte_socket_id()）
     uint32_t rule_size;    // 单条规则大小（RTE_ACL_RULE_SZ(5)）
     uint32_t max_rule_num; // 最大规则数量
@@ -82,6 +81,18 @@ int rte_acl_add_rules(struct rte_acl_ctx *ctx,
 **返回值：**
 - 成功：0
 - 失败：负数错误码
+
+
+
+采用柔性数组是最推荐的方式。
+
+```
+struct acl_ipv4_rule {
+    struct rte_acl_rule_data data;
+    struct rte_acl_field field[];  // 柔性数组成员
+};
+// sizeof(struct acl_ipv4_rule) = sizeof(struct rte_acl_rule_data)
+```
 
 
 
